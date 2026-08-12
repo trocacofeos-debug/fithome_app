@@ -57,10 +57,11 @@ flutter_launcher_icons:
     generate: true
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21
-  # Fundo escuro atrás do ícone "adaptativo" do Android (evita bordas
-  # brancas se a sua logo tiver fundo transparente)
+  # Ícone adaptativo do Android: fundo sólido + arte separada, com margem
+  # de segurança já embutida na imagem (senão a máscara do launcher corta
+  # as bordas).
   adaptive_icon_background: "#0D0D0D"
-  adaptive_icon_foreground: "assets/icon/icon.png"
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"
 
 flutter:
   uses-material-design: true
