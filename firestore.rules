@@ -1,0 +1,64 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return logado() && role() == 'admin';
+    }
+
+    function isInstrutor() {
+      return logado() && role() == 'instrutor';
+    }
+
+    function isDono(uid) {
+      return logado() && request.auth.uid == uid;
+    }
+
+    // ---------- USERS ----------
+    match /users/{userId} {
+      allow read: if logado();
+      // Usuário pode editar seu próprio perfil, mas NUNCA o próprio campo "role".
+      allow update: if isDono(userId) &&
+                       request.resource.data.role == resource.data.role
+                    || isAdmin();
+      allow create: if isDono(userId);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- WORKOUTS ----------
+    match /workouts/{workoutId} {
+      allow read: if logado();
+      allow create: if isInstrutor() || isAdmin();
+      allow update, delete: if isAdmin() ||
+                                (isInstrutor() && resource.data.instrutorId == request.auth.uid);
+    }
+
+    // ---------- PLANS ----------
+    match /plans/{planId} {
+      allow read: if logado();
+      allow write: if isAdmin();
+    }
+
+    // ---------- SUBSCRIPTIONS ----------
+    match /subscriptions/{subId} {
+      allow read: if isAdmin() || (logado() && resource.data.alunoId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
+    // ---------- WORKOUT PROGRESS ----------
+    match /workout_progress/{progressId} {
+      allow read, write: if isAdmin() ||
+                             (logado() && resource != null && resource.data.alunoId == request.auth.uid);
+      allow create: if logado() && request.resource.data.alunoId == request.auth.uid;
+    }
+  }
+}

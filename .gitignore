@@ -1,0 +1,13 @@
+.env
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+ios/Pods/
+ios/Flutter/Flutter.framework
+android/.gradle/
+android/local.properties
