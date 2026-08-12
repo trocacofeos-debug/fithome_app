@@ -43,9 +43,28 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+    image_path: "assets/icon/icon.png"
+    background_color: "#0D0D0D"
+    theme_color: "#0D0D0D"
+  windows:
+    generate: true
+  image_path: "assets/icon/icon.png"
+  min_sdk_android: 21
+  # Fundo escuro atrás do ícone "adaptativo" do Android (evita bordas
+  # brancas se a sua logo tiver fundo transparente)
+  adaptive_icon_background: "#0D0D0D"
+  adaptive_icon_foreground: "assets/icon/icon.png"
 
 flutter:
   uses-material-design: true
   assets:
     - .env
     - assets/images/
+    - assets/icon/
