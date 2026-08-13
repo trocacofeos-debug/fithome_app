@@ -71,6 +71,28 @@ class FirestoreService {
     return _db.collection(FirestoreCollections.workouts).doc(id).delete();
   }
 
+  /// Cria uma cópia de um treino existente como rascunho (não publicado),
+  /// sempre como treino geral (o instrutor escolhe conscientemente se quer
+  /// tornar individual de novo, evitando duplicar sem querer um treino
+  /// pessoal de um aluno para outro contexto).
+  Future<String> duplicarTreino(WorkoutModel original) async {
+    final copia = WorkoutModel(
+      id: '',
+      titulo: '${original.titulo} (cópia)',
+      descricao: original.descricao,
+      instrutorId: original.instrutorId,
+      instrutorNome: original.instrutorNome,
+      nivel: original.nivel,
+      categoria: original.categoria,
+      capaUrl: original.capaUrl,
+      exercicios: original.exercicios,
+      duracaoMinutos: original.duracaoMinutos,
+      createdAt: DateTime.now(),
+      publicado: false,
+    );
+    return criarTreino(copia);
+  }
+
   Stream<List<WorkoutModel>> streamTreinos({
     String? instrutorId,
     bool apenasPublicados = false,

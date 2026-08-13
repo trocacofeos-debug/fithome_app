@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -158,8 +158,29 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
                 ),
               ],
             ),
+            if (_exercicios.length > 1)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: Text('Arraste pelo ícone ⠿ para reordenar',
+                    style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+              ),
             const SizedBox(height: 8),
-            ..._exercicios.asMap().entries.map((entry) => _cardExercicio(entry.key, entry.value)),
+            ReorderableListView(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  if (newIndex > oldIndex) newIndex -= 1;
+                  final item = _exercicios.removeAt(oldIndex);
+                  _exercicios.insert(newIndex, item);
+                });
+              },
+              children: [
+                for (int i = 0; i < _exercicios.length; i++)
+                  _cardExercicio(i, _exercicios[i], key: ValueKey(_exercicios[i].id)),
+              ],
+            ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _salvando ? null : _salvar,
@@ -346,8 +367,39 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
     if (img != null) setState(() => _capaLocal = File(img.path));
   }
 
-  Widget _cardExercicio(int index, _ExercicioForm ex) {
+  static const _formatosVideoRecomendados = ['mp4', 'webm'];
+
+  Future<void> _escolherVideo(_ExercicioForm ex) async {
+    final picker = ImagePicker();
+    final video = await picker.pickVideo(source: ImageSource.gallery);
+    if (video == null) return;
+
+    final extensao = video.path.split('.').last.toLowerCase();
+    if (!_formatosVideoRecomendados.contains(extensao)) {
+      final continuar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Formato pode não funcionar'),
+          content: Text(
+            'Esse vídeo está em ".$extensao" — alguns navegadores (principalmente vindo do '
+            'iPhone, formato .mov) não conseguem reproduzir esse formato. O recomendado é '
+            '.mp4 ou .webm.\n\nQuer usar esse vídeo mesmo assim?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Escolher outro')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Usar mesmo assim')),
+          ],
+        ),
+      );
+      if (continuar != true) return;
+    }
+
+    setState(() => ex.videoLocal = File(video.path));
+  }
+
+  Widget _cardExercicio(int index, _ExercicioForm ex, {required Key key}) {
     return Card(
+      key: key,
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -356,6 +408,13 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
           children: [
             Row(
               children: [
+                ReorderableDragStartListener(
+                  index: index,
+                  child: const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: Icon(Icons.drag_indicator, color: AppColors.mutedForeground),
+                  ),
+                ),
                 Expanded(
                   child: TextFormField(
                     controller: ex.nomeCtrl,
@@ -397,11 +456,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
             ),
             const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () async {
-                final picker = ImagePicker();
-                final video = await picker.pickVideo(source: ImageSource.gallery);
-                if (video != null) setState(() => ex.videoLocal = File(video.path));
-              },
+              onPressed: () => _escolherVideo(ex),
               icon: const Icon(Icons.videocam_outlined),
               label: Text(ex.videoLocal != null || ex.videoUrlExistente != null
                   ? 'Vídeo selecionado ✓'
