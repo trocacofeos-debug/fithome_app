@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../models/user_model.dart';
@@ -7,6 +8,7 @@ enum AuthStatus { carregando, autenticado, naoAutenticado }
 
 class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
+  StreamSubscription<UserModel?>? _userSub;
 
   AuthStatus status = AuthStatus.carregando;
   UserModel? usuario;
@@ -17,20 +19,33 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> _onAuthChanged(fb.User? firebaseUser) async {
+    await _userSub?.cancel();
+    _userSub = null;
+
     if (firebaseUser == null) {
       usuario = null;
       status = AuthStatus.naoAutenticado;
       notifyListeners();
       return;
     }
-    try {
-      usuario = await _authService.getUserData(firebaseUser.uid);
-      status = AuthStatus.autenticado;
-    } catch (e) {
-      erro = e.toString();
-      status = AuthStatus.naoAutenticado;
-    }
-    notifyListeners();
+
+    // Assina o documento do usuário em tempo real: qualquer alteração no
+    // perfil (pela tela "Meu Perfil", ou por um admin) já reflete no app
+    // inteiro na hora, sem precisar deslogar e logar de novo.
+    _userSub = _authService.userDataStream(firebaseUser.uid).listen(
+      (dados) {
+        if (dados != null) {
+          usuario = dados;
+          status = AuthStatus.autenticado;
+        }
+        notifyListeners();
+      },
+      onError: (e) {
+        erro = e.toString();
+        status = AuthStatus.naoAutenticado;
+        notifyListeners();
+      },
+    );
   }
 
   Future<bool> login(String email, String senha) async {
@@ -76,10 +91,18 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await _userSub?.cancel();
+    _userSub = null;
     await _authService.logout();
     usuario = null;
     status = AuthStatus.naoAutenticado;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _userSub?.cancel();
+    super.dispose();
   }
 
   String _mensagemAmigavel(Object e) {
@@ -97,10 +120,6 @@ class AuthProvider extends ChangeNotifier {
         case 'account-exists-with-different-credential':
           return 'Já existe uma conta com este e-mail usando outro método de login.';
         default:
-          // Mostrando o código explicitamente (ex: "auth/invalid-api-key",
-          // "auth/configuration-not-found") porque e.message às vezes vem
-          // vazio ou genérico ("Error") no Firebase Web, e o código é o
-          // que realmente aponta a causa.
           return 'Erro de autenticação (${e.code}): ${e.message ?? "sem detalhes"}';
       }
     }

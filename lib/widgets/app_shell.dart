@@ -1,8 +1,13 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme/app_theme.dart';
 import '../core/constants/app_constants.dart';
 import '../providers/auth_provider.dart';
+import '../screens/shared/profile_screen.dart';
+import '../screens/shared/notifications_screen.dart';
+import '../services/firestore_service.dart';
 
 class AppTab {
   final String key;
@@ -100,7 +105,9 @@ class _TopBar extends StatelessWidget {
           const SizedBox(width: 6),
           Text('· ${role.label}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: roleColor)),
           const Spacer(),
-          _CircleIconButton(icon: Icons.notifications_outlined, onTap: () {}),
+          _AvatarButton(role: role, roleColor: roleColor),
+          const SizedBox(width: 10),
+          _NotificationBell(),
           const SizedBox(width: 10),
           _CircleIconButton(
             icon: Icons.logout,
@@ -109,6 +116,84 @@ class _TopBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _AvatarButton extends StatelessWidget {
+  final UserRole role;
+  final Color roleColor;
+
+  const _AvatarButton({required this.role, required this.roleColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final usuario = context.watch<AuthProvider>().usuario;
+    final iniciais = (usuario == null || usuario.nome.isEmpty) ? '?' : usuario.nome.substring(0, 1).toUpperCase();
+
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: roleColor.withOpacity(0.15),
+          border: Border.all(color: roleColor.withOpacity(0.4)),
+          image: usuario?.fotoUrl != null
+              ? DecorationImage(image: NetworkImage(usuario!.fotoUrl!), fit: BoxFit.cover)
+              : null,
+        ),
+        child: usuario?.fotoUrl == null
+            ? Center(child: Text(iniciais, style: condensed(fontSize: 13, color: roleColor)))
+            : null,
+      ),
+    );
+  }
+}
+
+class _NotificationBell extends StatelessWidget {
+  _NotificationBell();
+
+  final _fsService = FirestoreService();
+
+  @override
+  Widget build(BuildContext context) {
+    final uid = context.watch<AuthProvider>().usuario?.id;
+    if (uid == null) {
+      return _CircleIconButton(icon: Icons.notifications_outlined, onTap: () {});
+    }
+
+    return StreamBuilder(
+      stream: _fsService.streamNotificacoes(uid),
+      builder: (context, snapshot) {
+        final naoLidas = (snapshot.data ?? []).where((n) => !n.lida).length;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _CircleIconButton(
+              icon: Icons.notifications_outlined,
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+            ),
+            if (naoLidas > 0)
+              Positioned(
+                right: -2,
+                top: -2,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  decoration: const BoxDecoration(color: AppColors.destructive, shape: BoxShape.circle),
+                  child: Text(
+                    naoLidas > 9 ? '9+' : '$naoLidas',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

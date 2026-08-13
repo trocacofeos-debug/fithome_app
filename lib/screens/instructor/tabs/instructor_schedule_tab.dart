@@ -1,4 +1,4 @@
-// ignore_for_file: deprecated_member_use
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -342,6 +342,12 @@ class _NovoAgendamentoSheetState extends State<_NovoAgendamentoSheet> {
       dataHora: dataHora,
       duracaoMinutos: _duracao,
     ));
+    await widget.fsService.criarNotificacao(
+      userId: _alunoId!,
+      titulo: 'Novo compromisso na agenda',
+      mensagem: '$_tipo agendado para ${DateFormat('dd/MM').format(dataHora)} às ${_hora.format(context)}.',
+      tipo: 'agendamento',
+    );
     if (mounted) Navigator.pop(context);
   }
 }

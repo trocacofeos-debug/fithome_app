@@ -1,11 +1,11 @@
 {
-    "name": "fithome_app",
-    "short_name": "fithome_app",
+    "name": "FitHome Pro",
+    "short_name": "FitHome",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0D0D0D",
     "theme_color": "#0D0D0D",
-    "description": "A new Flutter project.",
+    "description": "App de treinos em casa.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

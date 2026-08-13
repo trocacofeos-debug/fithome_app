@@ -5,6 +5,7 @@ import '../models/workout_model.dart';
 import '../models/subscription_model.dart';
 import '../models/workout_progress_model.dart';
 import '../models/appointment_model.dart';
+import '../models/notification_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -21,14 +22,38 @@ class FirestoreService {
         );
   }
 
-  Future<void> atualizarRole(String uid, UserRole novaRole) {
-    return _db.collection(FirestoreCollections.users).doc(uid).update({
+  Future<void> atualizarRole(String uid, UserRole novaRole) async {
+    await _db.collection(FirestoreCollections.users).doc(uid).update({
       'role': novaRole.value,
     });
+    await criarNotificacao(
+      userId: uid,
+      titulo: 'Seu perfil foi atualizado',
+      mensagem: 'Agora você é ${novaRole.label} no FitHome Pro.',
+      tipo: 'role_alterado',
+    );
   }
 
   Future<void> ativarDesativarUsuario(String uid, bool ativo) {
     return _db.collection(FirestoreCollections.users).doc(uid).update({'ativo': ativo});
+  }
+
+  /// Atualiza o próprio perfil (usado pela tela "Meu Perfil" — qualquer
+  /// usuário pode editar os próprios dados básicos, mas nunca o "role").
+  Future<void> atualizarPerfilProprio(
+    String uid, {
+    String? nome,
+    String? telefone,
+    String? cpf,
+    String? fotoUrl,
+  }) {
+    final dados = <String, dynamic>{};
+    if (nome != null) dados['nome'] = nome;
+    if (telefone != null) dados['telefone'] = telefone;
+    if (cpf != null) dados['cpf'] = cpf;
+    if (fotoUrl != null) dados['fotoUrl'] = fotoUrl;
+    if (dados.isEmpty) return Future.value();
+    return _db.collection(FirestoreCollections.users).doc(uid).update(dados);
   }
 
   // ---------- TREINOS ----------
@@ -178,5 +203,54 @@ class FirestoreService {
         .orderBy('dataHora')
         .snapshots()
         .map((snap) => snap.docs.map((d) => AppointmentModel.fromMap(d.id, d.data())).toList());
+  }
+
+  // ---------- NOTIFICAÇÕES ----------
+
+  Future<void> criarNotificacao({
+    required String userId,
+    required String titulo,
+    required String mensagem,
+    String tipo = 'geral',
+    String? rota,
+  }) async {
+    final notificacao = NotificationModel(
+      id: '',
+      userId: userId,
+      titulo: titulo,
+      mensagem: mensagem,
+      tipo: tipo,
+      createdAt: DateTime.now(),
+      rota: rota,
+    );
+    await _db.collection(FirestoreCollections.notifications).add(notificacao.toMap());
+  }
+
+  Stream<List<NotificationModel>> streamNotificacoes(String userId) {
+    return _db
+        .collection(FirestoreCollections.notifications)
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => NotificationModel.fromMap(d.id, d.data())).toList());
+  }
+
+  Future<void> marcarNotificacaoComoLida(String id) {
+    return _db.collection(FirestoreCollections.notifications).doc(id).update({'lida': true});
+  }
+
+  Future<void> marcarTodasNotificacoesComoLidas(String userId) async {
+    final naoLidas = await _db
+        .collection(FirestoreCollections.notifications)
+        .where('userId', isEqualTo: userId)
+        .where('lida', isEqualTo: false)
+        .get();
+    if (naoLidas.docs.isEmpty) return;
+    final batch = _db.batch();
+    for (final doc in naoLidas.docs) {
+      batch.update(doc.reference, {'lida': true});
+    }
+    await batch.commit();
   }
 }

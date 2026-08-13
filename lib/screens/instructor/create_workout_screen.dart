@@ -14,6 +14,7 @@ import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/r2_storage_service.dart';
 import '../../core/constants/app_constants.dart';
+import '../../widgets/shared_widgets.dart';
 
 class CreateWorkoutScreen extends StatefulWidget {
   final String? workoutId; // se preenchido, é edição
@@ -257,6 +258,9 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
       builder: (ctx) => StreamBuilder<List<UserModel>>(
         stream: _fsService.streamUsuarios(role: UserRole.aluno),
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: StreamErrorMessage(erro: snapshot.error)));
+          }
           final alunos = snapshot.data ?? [];
           return SafeArea(
             child: Padding(
@@ -462,7 +466,16 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
       if (widget.workoutId != null) {
         await _fsService.atualizarTreino(widget.workoutId!, treino.toMap());
       } else {
-        await _fsService.criarTreino(treino);
+        final novoId = await _fsService.criarTreino(treino);
+        if (treino.isIndividual) {
+          await _fsService.criarNotificacao(
+            userId: treino.alunoId!,
+            titulo: 'Novo treino personalizado',
+            mensagem: '${treino.instrutorNome} criou o treino "${treino.titulo}" especialmente para você.',
+            tipo: 'treino_individual',
+            rota: '/aluno/treino/$novoId',
+          );
+        }
       }
 
       if (mounted) context.go('/instrutor');

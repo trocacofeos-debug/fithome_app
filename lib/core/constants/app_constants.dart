@@ -74,6 +74,7 @@ class FirestoreCollections {
   static const plans = 'plans';
   static const workoutProgress = 'workout_progress';
   static const appointments = 'appointments';
+  static const notifications = 'notifications';
 }
 
 class AppConstants {

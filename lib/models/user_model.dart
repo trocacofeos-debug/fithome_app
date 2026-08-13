@@ -11,6 +11,10 @@ class UserModel {
   final DateTime createdAt;
   final bool ativo;
 
+  /// CPF (só números). Exigido pelo Asaas para criar o cliente e emitir
+  /// cobranças — sem isso, o checkout de assinatura não funciona.
+  final String? cpf;
+
   UserModel({
     required this.id,
     required this.nome,
@@ -20,6 +24,7 @@ class UserModel {
     this.telefone,
     required this.createdAt,
     this.ativo = true,
+    this.cpf,
   });
 
   factory UserModel.fromMap(String id, Map<String, dynamic> map) {
@@ -32,6 +37,7 @@ class UserModel {
       telefone: map['telefone'],
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       ativo: map['ativo'] ?? true,
+      cpf: map['cpf'],
     );
   }
 
@@ -44,6 +50,7 @@ class UserModel {
       'telefone': telefone,
       'createdAt': Timestamp.fromDate(createdAt),
       'ativo': ativo,
+      'cpf': cpf,
     };
   }
 
@@ -52,6 +59,7 @@ class UserModel {
     String? fotoUrl,
     String? telefone,
     bool? ativo,
+    String? cpf,
   }) {
     return UserModel(
       id: id,
@@ -62,6 +70,7 @@ class UserModel {
       telefone: telefone ?? this.telefone,
       createdAt: createdAt,
       ativo: ativo ?? this.ativo,
+      cpf: cpf ?? this.cpf,
     );
   }
 }
