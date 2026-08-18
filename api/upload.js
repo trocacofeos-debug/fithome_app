@@ -1,9 +1,16 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const { randomUUID } = require('crypto');
 
+function sanitizarEndpoint(endpoint) {
+  return (endpoint || '')
+    .trim()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '');
+}
+
 const client = new S3Client({
   region: 'auto',
-  endpoint: `https://${process.env.R2_ENDPOINT}`,
+  endpoint: `https://${sanitizarEndpoint(process.env.R2_ENDPOINT)}`,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
@@ -12,8 +19,6 @@ const client = new S3Client({
 
 const PASTAS_PERMITIDAS = ['workouts', 'exercises', 'avatars'];
 
-// Corpo em base64 (JSON) — precisa de um pouco mais de espaço que o arquivo
-// puro; ajuste se algum dia enviar arquivos maiores que uns 4MB.
 module.exports.config = {
   api: { bodyParser: { sizeLimit: '8mb' } },
 };
@@ -43,6 +48,10 @@ module.exports = async (req, res) => {
       res.status(400).json({ error: `pasta inválida. Use uma de: ${PASTAS_PERMITIDAS.join(', ')}` });
       return;
     }
+    if (!process.env.R2_ENDPOINT || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY || !process.env.R2_BUCKET || !process.env.R2_PUBLIC_URL) {
+      res.status(500).json({ error: 'Variáveis de ambiente do R2 incompletas na Vercel (confira R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_PUBLIC_URL).' });
+      return;
+    }
 
     const extensao = nomeOriginal.includes('.') ? nomeOriginal.split('.').pop().toLowerCase() : 'bin';
     const chave = `${pasta}/${randomUUID()}.${extensao}`;
@@ -59,6 +68,8 @@ module.exports = async (req, res) => {
     res.status(200).json({ publicUrl });
   } catch (err) {
     console.error('Erro ao enviar pro R2:', err);
-    res.status(500).json({ error: 'Erro ao enviar arquivo' });
+    // Devolve a mensagem real do erro (não sensível — não inclui a chave
+    // secreta) para diagnosticar sem precisar ficar adivinhando.
+    res.status(500).json({ error: 'Erro ao enviar arquivo', detalhe: err.message || String(err) });
   }
 };
