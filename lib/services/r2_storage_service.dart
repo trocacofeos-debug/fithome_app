@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:minio/minio.dart';
 import 'package:uuid/uuid.dart';
@@ -9,6 +8,11 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// R2 é compatível com a API do S3, então usamos o pacote `minio` (cliente
 /// S3) apontando para o endpoint do R2. Credenciais ficam no arquivo `.env`
 /// (nunca commitar esse arquivo - veja `.env.example`).
+///
+/// IMPORTANTE: este serviço trabalha só com bytes (`Uint8List`), nunca com
+/// `dart:io File` — o `File` do dart:io não funciona no Flutter Web (lança
+/// `UnsupportedError` em qualquer operação de leitura). Usando bytes, o
+/// upload funciona igual em Web, Android, iOS e Desktop.
 class R2StorageService {
   late final Minio _client;
   final String bucket = dotenv.env['R2_BUCKET'] ?? '';
@@ -34,27 +38,25 @@ class R2StorageService {
   }
 
   /// Faz upload de um arquivo (vídeo de exercício, capa de treino, foto de
-  /// perfil etc) e retorna a URL pública para salvar no Firestore.
+  /// perfil etc) a partir dos bytes já lidos em memória, e retorna a URL
+  /// pública para salvar no Firestore.
   ///
-  /// Observação: o pacote `minio` para Dart não expõe `fPutObject` (esse
-  /// método existe em outros SDKs, como Python/Go/Java) — aqui usamos
-  /// `putObject`, que recebe o arquivo como `Stream<Uint8List>` mais o
-  /// tamanho em bytes.
+  /// [nomeOriginal] é usado só para descobrir a extensão (ex: "foto.jpg")
+  /// — o arquivo em si é salvo com um nome gerado (UUID), então não precisa
+  /// ser o nome real do arquivo do usuário.
   Future<String> upload({
-    required File arquivo,
+    required Uint8List bytes,
+    required String nomeOriginal,
     required String pasta, // ex: 'workouts', 'exercises', 'avatars'
   }) async {
-    final extensao = arquivo.path.split('.').last;
+    final extensao = nomeOriginal.contains('.') ? nomeOriginal.split('.').last : 'bin';
     final nomeArquivo = '$pasta/${const Uuid().v4()}.$extensao';
-
-    final tamanho = await arquivo.length();
-    final stream = arquivo.openRead().map((chunk) => Uint8List.fromList(chunk));
 
     await _client.putObject(
       bucket,
       nomeArquivo,
-      stream,
-      size: tamanho,
+      Stream.value(bytes),
+      size: bytes.length,
       metadata: {'Content-Type': _contentTypePorExtensao(extensao)},
     );
 
@@ -81,6 +83,8 @@ class R2StorageService {
         return 'video/mp4';
       case 'mov':
         return 'video/quicktime';
+      case 'webm':
+        return 'video/webm';
       default:
         return 'application/octet-stream';
     }

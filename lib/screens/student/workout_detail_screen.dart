@@ -6,7 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/workout_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
-import '../shared/exercise_video_player_screen.dart';
+import '../shared/gif_viewer_screen.dart';
 
 class WorkoutDetailScreen extends StatefulWidget {
   final String workoutId;
@@ -75,17 +75,22 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
                         final ex = entry.value;
                         return Card(
                           child: ListTile(
-                            leading: CircleAvatar(
-                              backgroundColor: AppColors.primary.withOpacity(0.15),
-                              child: Text('${i + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-                            ),
+                            leading: ex.gifUrl != null
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(ex.gifUrl!, width: 44, height: 44, fit: BoxFit.cover),
+                                  )
+                                : CircleAvatar(
+                                    backgroundColor: AppColors.primary.withOpacity(0.15),
+                                    child: Text('${i + 1}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+                                  ),
                             title: Text(ex.nome),
                             subtitle: Text('${ex.series} séries x ${ex.repeticoes} reps · descanso ${ex.descansoSegundos}s'),
-                            trailing: ex.videoUrl != null
-                                ? const Icon(Icons.play_circle_outline, color: AppColors.primary)
+                            trailing: ex.gifUrl != null
+                                ? const Icon(Icons.open_in_full, size: 18, color: AppColors.primary)
                                 : null,
-                            onTap: ex.videoUrl != null
-                                ? () => _abrirVideo(context, ex.videoUrl!, ex.nome)
+                            onTap: ex.gifUrl != null
+                                ? () => _abrirGif(context, ex.gifUrl!, ex.nome)
                                 : null,
                           ),
                         );
@@ -155,11 +160,11 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
     }
   }
 
-  void _abrirVideo(BuildContext context, String url, String titulo) {
+  void _abrirGif(BuildContext context, String url, String titulo) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ExerciseVideoPlayerScreen(videoUrl: url, titulo: titulo),
+        builder: (_) => GifViewerScreen(gifUrl: url, titulo: titulo),
         fullscreenDialog: true,
       ),
     );

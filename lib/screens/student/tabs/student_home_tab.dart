@@ -3,13 +3,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/workout_model.dart';
 import '../../../models/workout_progress_model.dart';
+import '../../../models/appointment_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
+import '../student_schedule_screen.dart';
 
 class StudentHomeTab extends StatelessWidget {
   const StudentHomeTab({super.key});
@@ -107,9 +110,66 @@ class StudentHomeTab extends StatelessWidget {
                 // concluiu; só cai no "primeiro instrutor do sistema" se
                 // você ainda não tem nenhuma atividade registrada.
                 _cardInstrutor(context, fsService, treinos, historico),
+                const SizedBox(height: 20),
+                _cardProximoCompromisso(context, fsService, alunoId),
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _cardProximoCompromisso(BuildContext context, FirestoreService fsService, String alunoId) {
+    return StreamBuilder<List<AppointmentModel>>(
+      stream: fsService.streamAgendaDoAluno(alunoId),
+      builder: (context, snapshot) {
+        final agora = DateTime.now();
+        final proximos = (snapshot.data ?? [])
+            .where((a) => a.dataHora.isAfter(agora) && a.status == AppointmentStatus.agendado)
+            .toList()
+          ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+
+        return InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentScheduleScreen())),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.event_outlined, color: AppColors.primary, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('MINHA AGENDA',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+                      Text(
+                        proximos.isEmpty
+                            ? 'Nenhum compromisso agendado'
+                            : '${proximos.first.tipo} · ${DateFormat('dd/MM').format(proximos.first.dataHora)} às ${DateFormat('HH:mm').format(proximos.first.dataHora)}',
+                        style: condensed(fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
+              ],
+            ),
+          ),
         );
       },
     );

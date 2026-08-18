@@ -4,12 +4,38 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/workout_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
 
-class StudentWorkoutsTab extends StatelessWidget {
+const _categorias = ['funcional', 'musculacao', 'hiit', 'alongamento'];
+
+String _rotuloCategoria(String c) {
+  switch (c) {
+    case 'funcional':
+      return 'Funcional';
+    case 'musculacao':
+      return 'Musculação';
+    case 'hiit':
+      return 'HIIT';
+    case 'alongamento':
+      return 'Alongamento';
+    default:
+      return c;
+  }
+}
+
+class StudentWorkoutsTab extends StatefulWidget {
   const StudentWorkoutsTab({super.key});
+
+  @override
+  State<StudentWorkoutsTab> createState() => _StudentWorkoutsTabState();
+}
+
+class _StudentWorkoutsTabState extends State<StudentWorkoutsTab> {
+  String _busca = '';
+  String? _categoriaFiltro; // null = todas
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +47,36 @@ class StudentWorkoutsTab extends StatelessWidget {
       children: [
         const SectionTitle('Meus Treinos'),
         const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: TextField(
+            style: const TextStyle(color: AppColors.foreground, fontSize: 14),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              hintText: 'Buscar treino...',
+              hintStyle: TextStyle(color: AppColors.mutedForeground),
+              prefixIcon: Icon(Icons.search, size: 18, color: AppColors.mutedForeground),
+            ),
+            onChanged: (v) => setState(() => _busca = v.toLowerCase()),
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 34,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _chipCategoria(null, 'Todas'),
+              ..._categorias.map((c) => _chipCategoria(c, _rotuloCategoria(c))),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         StreamBuilder(
           stream: fsService.streamTreinos(apenasPublicados: true, paraAlunoId: auth.usuario!.id),
           builder: (context, snapshot) {
@@ -31,73 +87,108 @@ class StudentWorkoutsTab extends StatelessWidget {
                 child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
               );
             }
-            final treinos = snapshot.data!;
+            final treinos = _aplicarFiltros(snapshot.data!);
             if (treinos.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.only(top: 20),
-                child: Text('Nenhum treino disponível no momento.', style: TextStyle(color: AppColors.mutedForeground)),
+              return Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: Text(
+                  snapshot.data!.isEmpty ? 'Nenhum treino disponível no momento.' : 'Nenhum treino encontrado.',
+                  style: const TextStyle(color: AppColors.mutedForeground),
+                ),
               );
             }
             return Column(
-              children: treinos.map((t) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: t.isIndividual ? AppColors.primary.withOpacity(0.4) : AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Icon(Icons.play_arrow, color: AppColors.primary),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(t.titulo,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.foreground)),
-                                ),
-                                if (t.isIndividual) ...[
-                                  const SizedBox(width: 6),
-                                  const StatusBadge(label: 'Personalizado', color: AppColors.primary),
-                                ],
-                              ],
-                            ),
-                            Text('${t.categoria} · ${t.duracaoMinutos} min · ${t.exercicios.length} exercícios',
-                                style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
-                          ],
-                        ),
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
-                        ),
-                        onPressed: () => context.push('/aluno/treino/${t.id}'),
-                        child: const Text('INICIAR'),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+              children: treinos.map((t) => _WorkoutRow(treino: t)).toList(),
             );
           },
         ),
       ],
+    );
+  }
+
+  Widget _chipCategoria(String? valor, String label) {
+    final selecionado = _categoriaFiltro == valor;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selecionado,
+        onSelected: (_) => setState(() => _categoriaFiltro = valor),
+        selectedColor: AppColors.primary.withOpacity(0.2),
+      ),
+    );
+  }
+
+  List<WorkoutModel> _aplicarFiltros(List<WorkoutModel> treinos) {
+    return treinos.where((t) {
+      if (_busca.isNotEmpty && !t.titulo.toLowerCase().contains(_busca)) return false;
+      if (_categoriaFiltro != null && t.categoria != _categoriaFiltro) return false;
+      return true;
+    }).toList();
+  }
+}
+
+class _WorkoutRow extends StatelessWidget {
+  final WorkoutModel treino;
+
+  const _WorkoutRow({required this.treino});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: treino.isIndividual ? AppColors.primary.withOpacity(0.4) : AppColors.border),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: treino.capaUrl != null
+                ? Image.network(treino.capaUrl!, width: 40, height: 40, fit: BoxFit.cover)
+                : Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                    child: const Icon(Icons.play_arrow, color: AppColors.primary),
+                  ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(treino.titulo,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.foreground)),
+                    ),
+                    if (treino.isIndividual) ...[
+                      const SizedBox(width: 6),
+                      const StatusBadge(label: 'Personalizado', color: AppColors.primary),
+                    ],
+                  ],
+                ),
+                Text('${_rotuloCategoria(treino.categoria)} · ${treino.duracaoMinutos} min · ${treino.exercicios.length} exercícios',
+                    style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
+            ),
+            onPressed: () => context.push('/aluno/treino/${treino.id}'),
+            child: const Text('INICIAR'),
+          ),
+        ],
+      ),
     );
   }
 }

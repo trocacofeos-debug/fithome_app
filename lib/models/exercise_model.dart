@@ -5,8 +5,7 @@ class ExerciseModel {
   final int series;
   final int repeticoes;
   final int descansoSegundos;
-  final String? videoUrl; // URL no Cloudflare R2
-  final String? thumbnailUrl;
+  final String? gifUrl; // URL do GIF demonstrativo no Cloudflare R2
 
   ExerciseModel({
     required this.id,
@@ -15,8 +14,7 @@ class ExerciseModel {
     required this.series,
     required this.repeticoes,
     required this.descansoSegundos,
-    this.videoUrl,
-    this.thumbnailUrl,
+    this.gifUrl,
   });
 
   factory ExerciseModel.fromMap(Map<String, dynamic> map) {
@@ -27,8 +25,9 @@ class ExerciseModel {
       series: map['series'] ?? 3,
       repeticoes: map['repeticoes'] ?? 12,
       descansoSegundos: map['descansoSegundos'] ?? 60,
-      videoUrl: map['videoUrl'],
-      thumbnailUrl: map['thumbnailUrl'],
+      // Lê "videoUrl" como fallback — treinos criados antes dessa mudança
+      // (quando ainda era vídeo) continuam mostrando o que já foi enviado.
+      gifUrl: map['gifUrl'] ?? map['videoUrl'],
     );
   }
 
@@ -40,8 +39,7 @@ class ExerciseModel {
       'series': series,
       'repeticoes': repeticoes,
       'descansoSegundos': descansoSegundos,
-      'videoUrl': videoUrl,
-      'thumbnailUrl': thumbnailUrl,
+      'gifUrl': gifUrl,
     };
   }
 }

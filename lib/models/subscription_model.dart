@@ -14,6 +14,12 @@ class SubscriptionModel {
   final DateTime? canceladaEm;
   final String? observacoes;
 
+  // Preenchidos automaticamente pela Cloud Function quando a cobrança é
+  // feita via Asaas. Ficam nulos em assinaturas criadas manualmente pelo
+  // admin (sem cobrança automática).
+  final String? asaasCustomerId;
+  final String? asaasSubscriptionId;
+
   SubscriptionModel({
     required this.id,
     required this.alunoId,
@@ -26,9 +32,12 @@ class SubscriptionModel {
     required this.proximoVencimento,
     this.canceladaEm,
     this.observacoes,
+    this.asaasCustomerId,
+    this.asaasSubscriptionId,
   });
 
   bool get emDia => status == SubscriptionStatus.ativa;
+  bool get cobrancaAutomatica => asaasSubscriptionId != null;
 
   factory SubscriptionModel.fromMap(String id, Map<String, dynamic> map) {
     return SubscriptionModel(
@@ -44,6 +53,8 @@ class SubscriptionModel {
           (map['proximoVencimento'] as Timestamp?)?.toDate() ?? DateTime.now(),
       canceladaEm: (map['canceladaEm'] as Timestamp?)?.toDate(),
       observacoes: map['observacoes'],
+      asaasCustomerId: map['asaasCustomerId'],
+      asaasSubscriptionId: map['asaasSubscriptionId'],
     );
   }
 
@@ -59,6 +70,8 @@ class SubscriptionModel {
       'proximoVencimento': Timestamp.fromDate(proximoVencimento),
       'canceladaEm': canceladaEm != null ? Timestamp.fromDate(canceladaEm!) : null,
       'observacoes': observacoes,
+      'asaasCustomerId': asaasCustomerId,
+      'asaasSubscriptionId': asaasSubscriptionId,
     };
   }
 }
@@ -77,6 +90,16 @@ class PlanModel {
     required this.duracaoDias,
     this.descricao,
   });
+
+  /// Ciclo de cobrança do Asaas mais próximo da duração do plano.
+  /// (O Asaas não tem "a cada N dias" livre — só ciclos fixos.)
+  String get cicloAsaas {
+    if (duracaoDias <= 10) return 'WEEKLY';
+    if (duracaoDias <= 45) return 'MONTHLY';
+    if (duracaoDias <= 100) return 'QUARTERLY';
+    if (duracaoDias <= 200) return 'SEMIANNUALLY';
+    return 'YEARLY';
+  }
 
   factory PlanModel.fromMap(String id, Map<String, dynamic> map) {
     return PlanModel(

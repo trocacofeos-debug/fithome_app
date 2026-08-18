@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
@@ -5,6 +7,7 @@ import '../../../models/user_model.dart';
 import '../../../models/subscription_model.dart';
 import '../../../services/firestore_service.dart';
 import '../../../services/subscription_service.dart';
+import '../../../services/payment_service.dart';
 import '../../../widgets/shared_widgets.dart';
 
 class AdminUsersTab extends StatefulWidget {
@@ -17,6 +20,7 @@ class AdminUsersTab extends StatefulWidget {
 class _AdminUsersTabState extends State<AdminUsersTab> {
   final _fsService = FirestoreService();
   final _subService = SubscriptionService();
+  final _paymentService = PaymentService();
   String _busca = '';
   UserRole? _filtroRole;
 
@@ -62,6 +66,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
         StreamBuilder(
           stream: _fsService.streamUsuarios(role: _filtroRole),
           builder: (context, snapshot) {
+            if (snapshot.hasError) return StreamErrorMessage(erro: snapshot.error);
             if (!snapshot.hasData) {
               return const Padding(
                 padding: EdgeInsets.only(top: 40),
@@ -77,6 +82,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
                     usuario: u,
                     subService: _subService,
                     fsService: _fsService,
+                    paymentService: _paymentService,
                   )).toList(),
             );
           },
@@ -93,7 +99,7 @@ class _AdminUsersTabState extends State<AdminUsersTab> {
         label: Text(label),
         selected: selecionado,
         onSelected: (_) => setState(() => _filtroRole = role),
-        selectedColor: AppColors.adminColor.withValues(alpha: 0.25),
+        selectedColor: AppColors.adminColor.withOpacity(0.25),
       ),
     );
   }
@@ -103,8 +109,9 @@ class _UserRow extends StatelessWidget {
   final UserModel usuario;
   final SubscriptionService subService;
   final FirestoreService fsService;
+  final PaymentService paymentService;
 
-  const _UserRow({required this.usuario, required this.subService, required this.fsService});
+  const _UserRow({required this.usuario, required this.subService, required this.fsService, required this.paymentService});
 
   @override
   Widget build(BuildContext context) {
@@ -135,6 +142,7 @@ class _UserRow extends StatelessWidget {
                       StreamBuilder(
                         stream: subService.streamDoAluno(usuario.id),
                         builder: (context, snap) {
+                          if (snap.hasError) return const StatusBadge(label: 'Erro', color: AppColors.destructive);
                           final assinatura = snap.data;
                           if (assinatura == null) return const StatusBadge(label: 'Sem plano', color: AppColors.mutedForeground);
                           return StatusBadge.status(assinatura.status.label);
@@ -165,7 +173,7 @@ class _UserRow extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => _UserDetailSheet(usuario: usuario, subService: subService, fsService: fsService),
+      builder: (ctx) => _UserDetailSheet(usuario: usuario, subService: subService, fsService: fsService, paymentService: paymentService),
     );
   }
 }
@@ -174,8 +182,14 @@ class _UserDetailSheet extends StatefulWidget {
   final UserModel usuario;
   final SubscriptionService subService;
   final FirestoreService fsService;
+  final PaymentService paymentService;
 
-  const _UserDetailSheet({required this.usuario, required this.subService, required this.fsService});
+  const _UserDetailSheet({
+    required this.usuario,
+    required this.subService,
+    required this.fsService,
+    required this.paymentService,
+  });
 
   @override
   State<_UserDetailSheet> createState() => _UserDetailSheetState();
@@ -222,7 +236,7 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
           const Text('PAPEL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
           const SizedBox(height: 6),
           DropdownButtonFormField<UserRole>(
-            initialValue: _role,
+            value: _role,
             dropdownColor: AppColors.card,
             items: UserRole.values.map((r) => DropdownMenuItem(value: r, child: Text(r.label))).toList(),
             onChanged: (r) async {
@@ -258,11 +272,40 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
             StreamBuilder(
               stream: widget.subService.streamDoAluno(widget.usuario.id),
               builder: (context, snap) {
+                if (snap.hasError) return StreamErrorMessage(erro: snap.error);
                 final assinatura = snap.data;
                 if (assinatura == null) {
                   return ElevatedButton(
                     onPressed: () => _atribuirPlano(context),
                     child: const Text('Atribuir plano'),
+                  );
+                }
+                if (assinatura.cobrancaAutomatica) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Cobrança automática ativa — renovação é feita pelo Asaas.',
+                          style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.destructive),
+                          onPressed: () async {
+                            try {
+                              await widget.paymentService.cancelarAssinatura(assinatura.id);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('$e'), backgroundColor: AppColors.destructive),
+                                );
+                              }
+                            }
+                          },
+                          child: const Text('Cancelar no Asaas'),
+                        ),
+                      ),
+                    ],
                   );
                 }
                 return Row(

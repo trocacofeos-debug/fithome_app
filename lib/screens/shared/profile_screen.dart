@@ -1,6 +1,6 @@
-// ignore_for_file: use_build_context_synchronously, deprecated_member_use
+// ignore_for_file: unnecessary_import, deprecated_member_use
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +11,7 @@ import '../../providers/auth_provider.dart';
 import '../../models/user_model.dart';
 import '../../services/firestore_service.dart';
 import '../../services/r2_storage_service.dart';
+import '../../core/utils/cpf_validator.dart';
 import '../../widgets/shared_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -29,7 +30,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController _telefoneCtrl;
   late final TextEditingController _cpfCtrl;
 
-  File? _fotoLocal;
+  Uint8List? _fotoBytes;
+  String? _fotoNomeArquivo;
   String? _fotoUrlExistente;
   bool _salvando = false;
   bool _enviandoFoto = false;
@@ -107,10 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   prefixIcon: Icon(Icons.badge_outlined),
                   helperText: 'Usado para gerar a cobrança da assinatura.',
                 ),
-                validator: (v) {
-                  if (v == null || v.isEmpty) return null; // opcional até assinar
-                  return v.length == 11 ? null : 'CPF precisa ter 11 dígitos';
-                },
+                validator: CpfValidator.validar,
               ),
             ],
 
@@ -141,13 +140,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               shape: BoxShape.circle,
               color: corPapel.withOpacity(0.15),
               border: Border.all(color: corPapel.withOpacity(0.4), width: 2),
-              image: _fotoLocal != null
-                  ? DecorationImage(image: FileImage(_fotoLocal!), fit: BoxFit.cover)
+              image: _fotoBytes != null
+                  ? DecorationImage(image: MemoryImage(_fotoBytes!), fit: BoxFit.cover)
                   : (_fotoUrlExistente != null
                       ? DecorationImage(image: NetworkImage(_fotoUrlExistente!), fit: BoxFit.cover)
                       : null),
             ),
-            child: (_fotoLocal == null && _fotoUrlExistente == null)
+            child: (_fotoBytes == null && _fotoUrlExistente == null)
                 ? Center(
                     child: Text(
                       usuario.nome.isNotEmpty ? usuario.nome.substring(0, 1).toUpperCase() : '?',
@@ -177,16 +176,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80, maxWidth: 600);
     if (img == null) return;
 
+    final bytes = await img.readAsBytes();
     setState(() {
-      _fotoLocal = File(img.path);
+      _fotoBytes = bytes;
+      _fotoNomeArquivo = img.name;
       _enviandoFoto = true;
     });
 
     try {
-      final url = await _storageService.upload(arquivo: _fotoLocal!, pasta: 'avatars');
+      final url = await _storageService.upload(
+        bytes: bytes,
+        nomeOriginal: _fotoNomeArquivo ?? 'avatar.jpg',
+        pasta: 'avatars',
+      );
+      if (!mounted) return;
       final uid = context.read<AuthProvider>().usuario!.id;
       await _fsService.atualizarPerfilProprio(uid, fotoUrl: url);
-      setState(() => _fotoUrlExistente = url);
+      if (mounted) setState(() => _fotoUrlExistente = url);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

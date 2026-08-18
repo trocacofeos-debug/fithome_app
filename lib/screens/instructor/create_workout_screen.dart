@@ -1,6 +1,6 @@
-// ignore_for_file: use_build_context_synchronously, deprecated_member_use
+// ignore_for_file: deprecated_member_use
 
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -43,7 +43,8 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
 
   String _nivel = 'iniciante';
   String _categoria = 'funcional';
-  File? _capaLocal;
+  Uint8List? _capaBytes;
+  String? _capaNomeArquivo;
   String? _capaUrlExistente;
   bool _salvando = false;
 
@@ -339,13 +340,13 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
           color: AppColors.card,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.border),
-          image: _capaLocal != null
-              ? DecorationImage(image: FileImage(_capaLocal!), fit: BoxFit.cover)
+          image: _capaBytes != null
+              ? DecorationImage(image: MemoryImage(_capaBytes!), fit: BoxFit.cover)
               : (_capaUrlExistente != null
                   ? DecorationImage(image: NetworkImage(_capaUrlExistente!), fit: BoxFit.cover)
                   : null),
         ),
-        child: (_capaLocal == null && _capaUrlExistente == null)
+        child: (_capaBytes == null && _capaUrlExistente == null)
             ? const Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -364,37 +365,37 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
   Future<void> _escolherCapa() async {
     final picker = ImagePicker();
     final img = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
-    if (img != null) setState(() => _capaLocal = File(img.path));
+    if (img == null) return;
+    final bytes = await img.readAsBytes();
+    setState(() {
+      _capaBytes = bytes;
+      _capaNomeArquivo = img.name;
+    });
   }
 
-  static const _formatosVideoRecomendados = ['mp4', 'webm'];
-
-  Future<void> _escolherVideo(_ExercicioForm ex) async {
+  Future<void> _escolherGif(_ExercicioForm ex) async {
     final picker = ImagePicker();
-    final video = await picker.pickVideo(source: ImageSource.gallery);
-    if (video == null) return;
+    final arquivo = await picker.pickImage(source: ImageSource.gallery);
+    if (arquivo == null) return;
 
-    final extensao = video.path.split('.').last.toLowerCase();
-    if (!_formatosVideoRecomendados.contains(extensao)) {
-      final continuar = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Formato pode não funcionar'),
-          content: Text(
-            'Esse vídeo está em ".$extensao" — alguns navegadores (principalmente vindo do '
-            'iPhone, formato .mov) não conseguem reproduzir esse formato. O recomendado é '
-            '.mp4 ou .webm.\n\nQuer usar esse vídeo mesmo assim?',
+    final extensao = arquivo.name.contains('.') ? arquivo.name.split('.').last.toLowerCase() : '';
+    if (extensao != 'gif') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Escolha um arquivo .gif — outros formatos de imagem não animam.'),
+            backgroundColor: AppColors.danger,
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Escolher outro')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Usar mesmo assim')),
-          ],
-        ),
-      );
-      if (continuar != true) return;
+        );
+      }
+      return;
     }
 
-    setState(() => ex.videoLocal = File(video.path));
+    final bytes = await arquivo.readAsBytes();
+    setState(() {
+      ex.gifBytes = bytes;
+      ex.gifNomeArquivo = arquivo.name;
+    });
   }
 
   Widget _cardExercicio(int index, _ExercicioForm ex, {required Key key}) {
@@ -455,12 +456,23 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
               ],
             ),
             const SizedBox(height: 8),
+            if (ex.gifBytes != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.memory(ex.gifBytes!, height: 100, fit: BoxFit.cover, width: double.infinity),
+              )
+            else if (ex.gifUrlExistente != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(ex.gifUrlExistente!, height: 100, fit: BoxFit.cover, width: double.infinity),
+              ),
+            if (ex.gifBytes != null || ex.gifUrlExistente != null) const SizedBox(height: 8),
             OutlinedButton.icon(
-              onPressed: () => _escolherVideo(ex),
-              icon: const Icon(Icons.videocam_outlined),
-              label: Text(ex.videoLocal != null || ex.videoUrlExistente != null
-                  ? 'Vídeo selecionado ✓'
-                  : 'Adicionar vídeo demonstrativo'),
+              onPressed: () => _escolherGif(ex),
+              icon: const Icon(Icons.gif_box_outlined),
+              label: Text(ex.gifBytes != null || ex.gifUrlExistente != null
+                  ? 'Trocar GIF demonstrativo'
+                  : 'Adicionar GIF demonstrativo'),
             ),
           ],
         ),
@@ -482,15 +494,23 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
 
     try {
       String? capaUrl = _capaUrlExistente;
-      if (_capaLocal != null) {
-        capaUrl = await _storageService.upload(arquivo: _capaLocal!, pasta: 'workouts');
+      if (_capaBytes != null) {
+        capaUrl = await _storageService.upload(
+          bytes: _capaBytes!,
+          nomeOriginal: _capaNomeArquivo ?? 'capa.jpg',
+          pasta: 'workouts',
+        );
       }
 
       final exerciciosModel = <ExerciseModel>[];
       for (final ex in _exercicios) {
-        String? videoUrl = ex.videoUrlExistente;
-        if (ex.videoLocal != null) {
-          videoUrl = await _storageService.upload(arquivo: ex.videoLocal!, pasta: 'exercises');
+        String? gifUrl = ex.gifUrlExistente;
+        if (ex.gifBytes != null) {
+          gifUrl = await _storageService.upload(
+            bytes: ex.gifBytes!,
+            nomeOriginal: ex.gifNomeArquivo ?? 'exercicio.gif',
+            pasta: 'exercises',
+          );
         }
         exerciciosModel.add(ExerciseModel(
           id: ex.id,
@@ -498,7 +518,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
           series: int.tryParse(ex.seriesCtrl.text) ?? 3,
           repeticoes: int.tryParse(ex.repeticoesCtrl.text) ?? 12,
           descansoSegundos: int.tryParse(ex.descansoCtrl.text) ?? 60,
-          videoUrl: videoUrl,
+          gifUrl: gifUrl,
         ));
       }
 
@@ -552,8 +572,9 @@ class _ExercicioForm {
   final seriesCtrl = TextEditingController(text: '3');
   final repeticoesCtrl = TextEditingController(text: '12');
   final descansoCtrl = TextEditingController(text: '60');
-  File? videoLocal;
-  String? videoUrlExistente;
+  Uint8List? gifBytes;
+  String? gifNomeArquivo;
+  String? gifUrlExistente;
 
   _ExercicioForm() : id = const Uuid().v4();
 
@@ -562,6 +583,6 @@ class _ExercicioForm {
     seriesCtrl.text = e.series.toString();
     repeticoesCtrl.text = e.repeticoes.toString();
     descansoCtrl.text = e.descansoSegundos.toString();
-    videoUrlExistente = e.videoUrl;
+    gifUrlExistente = e.gifUrl;
   }
 }
