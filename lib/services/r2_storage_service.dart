@@ -13,6 +13,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// `dart:io File` — o `File` do dart:io não funciona no Flutter Web (lança
 /// `UnsupportedError` em qualquer operação de leitura). Usando bytes, o
 /// upload funciona igual em Web, Android, iOS e Desktop.
+///
+/// NOTA DE SEGURANÇA: como o app roda no navegador (Flutter Web), essa
+/// chave secreta do R2 fica embutida no build público — em teoria, alguém
+/// que abrir o DevTools consegue localizá-la. Se isso virar preocupação
+/// real (bucket com dados sensíveis, custo de abuso, etc.), a correção é
+/// mover esse upload para um backend (Vercel Function ou Cloud Function)
+/// que guarda a chave só no servidor — dá pra fazer isso depois, sem
+/// pressa, quando fizer sentido pra você.
 class R2StorageService {
   late final Minio _client;
   final String bucket = dotenv.env['R2_BUCKET'] ?? '';
@@ -37,7 +45,7 @@ class R2StorageService {
         .replaceFirst(RegExp(r'/+$'), '');
   }
 
-  /// Faz upload de um arquivo (vídeo de exercício, capa de treino, foto de
+  /// Faz upload de um arquivo (GIF de exercício, capa de treino, foto de
   /// perfil etc) a partir dos bytes já lidos em memória, e retorna a URL
   /// pública para salvar no Firestore.
   ///
@@ -79,6 +87,8 @@ class R2StorageService {
         return 'image/png';
       case 'webp':
         return 'image/webp';
+      case 'gif':
+        return 'image/gif';
       case 'mp4':
         return 'video/mp4';
       case 'mov':
