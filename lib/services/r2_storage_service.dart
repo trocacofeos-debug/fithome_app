@@ -1,81 +1,62 @@
+import 'dart:convert';
 import 'dart:typed_data';
-import 'package:minio/minio.dart';
-import 'package:uuid/uuid.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-/// Serviço de armazenamento de vídeos/imagens no Cloudflare R2.
+/// Serviço de upload de arquivos (capa de treino, GIF de exercício, avatar).
 ///
-/// R2 é compatível com a API do S3, então usamos o pacote `minio` (cliente
-/// S3) apontando para o endpoint do R2. Credenciais ficam no arquivo `.env`
-/// (nunca commitar esse arquivo - veja `.env.example`).
+/// HISTÓRICO: a primeira versão usava o pacote `minio` pra falar direto com
+/// o Cloudflare R2 do navegador. Isso não funciona de forma confiável no
+/// Flutter Web — o protocolo de assinatura da AWS que o R2 usa (streaming
+/// signed payload) não é algo que o navegador consegue enviar corretamente
+/// via fetch/XHR, e a falha de assinatura aparecia disfarçada de erro de
+/// CORS (o R2 não devolve cabeçalho de CORS em respostas de erro de auth).
 ///
-/// IMPORTANTE: este serviço trabalha só com bytes (`Uint8List`), nunca com
-/// `dart:io File` — o `File` do dart:io não funciona no Flutter Web (lança
-/// `UnsupportedError` em qualquer operação de leitura). Usando bytes, o
-/// upload funciona igual em Web, Android, iOS e Desktop.
-///
-/// NOTA DE SEGURANÇA: como o app roda no navegador (Flutter Web), essa
-/// chave secreta do R2 fica embutida no build público — em teoria, alguém
-/// que abrir o DevTools consegue localizá-la. Se isso virar preocupação
-/// real (bucket com dados sensíveis, custo de abuso, etc.), a correção é
-/// mover esse upload para um backend (Vercel Function ou Cloud Function)
-/// que guarda a chave só no servidor — dá pra fazer isso depois, sem
-/// pressa, quando fizer sentido pra você.
+/// SOLUÇÃO ATUAL: o navegador manda os bytes (em base64) pra uma Vercel
+/// Serverless Function (`/api/upload.js`), que roda no servidor — lá sim
+/// um cliente S3 de verdade (Node) consegue assinar e enviar pro R2 sem
+/// nenhuma limitação de navegador. O app nunca fala direto com o R2, e
+/// nunca tem a chave secreta.
 class R2StorageService {
-  late final Minio _client;
-  final String bucket = dotenv.env['R2_BUCKET'] ?? '';
-  final String publicBaseUrl = dotenv.env['R2_PUBLIC_URL'] ?? '';
+  /// URL da função serverless de upload — normalmente
+  /// "https://SEU-APP.vercel.app/api/upload", configurada no `.env` como
+  /// UPLOAD_API_URL.
+  final String _uploadEndpoint = dotenv.env['UPLOAD_API_URL'] ?? '';
 
-  R2StorageService() {
-    _client = Minio(
-      // O pacote minio espera só o domínio puro (sem "https://" e sem "/"
-      // no final) — removemos aqui por segurança, caso o .env venha com a
-      // URL completa por engano.
-      endPoint: _sanitizarEndpoint(dotenv.env['R2_ENDPOINT'] ?? ''),
-      accessKey: dotenv.env['R2_ACCESS_KEY_ID'] ?? '',
-      secretKey: dotenv.env['R2_SECRET_ACCESS_KEY'] ?? '',
-      useSSL: true,
-    );
-  }
-
-  String _sanitizarEndpoint(String endpoint) {
-    return endpoint
-        .trim()
-        .replaceFirst(RegExp(r'^https?://'), '')
-        .replaceFirst(RegExp(r'/+$'), '');
-  }
-
-  /// Faz upload de um arquivo (GIF de exercício, capa de treino, foto de
-  /// perfil etc) a partir dos bytes já lidos em memória, e retorna a URL
-  /// pública para salvar no Firestore.
-  ///
-  /// [nomeOriginal] é usado só para descobrir a extensão (ex: "foto.jpg")
-  /// — o arquivo em si é salvo com um nome gerado (UUID), então não precisa
-  /// ser o nome real do arquivo do usuário.
+  /// Faz upload de um arquivo a partir dos bytes já lidos em memória, e
+  /// retorna a URL pública para salvar no Firestore.
   Future<String> upload({
     required Uint8List bytes,
     required String nomeOriginal,
-    required String pasta, // ex: 'workouts', 'exercises', 'avatars'
+    required String pasta, // 'workouts', 'exercises' ou 'avatars'
   }) async {
-    final extensao = nomeOriginal.contains('.') ? nomeOriginal.split('.').last : 'bin';
-    final nomeArquivo = '$pasta/${const Uuid().v4()}.$extensao';
+    if (_uploadEndpoint.isEmpty) {
+      throw Exception(
+        'UPLOAD_API_URL não configurado no .env — aponte para a URL da sua '
+        'função /api/upload publicada na Vercel.',
+      );
+    }
 
-    await _client.putObject(
-      bucket,
-      nomeArquivo,
-      Stream.value(bytes),
-      size: bytes.length,
-      metadata: {'Content-Type': _contentTypePorExtensao(extensao)},
+    final extensao = nomeOriginal.contains('.') ? nomeOriginal.split('.').last : '';
+    final contentType = _contentTypePorExtensao(extensao);
+
+    final resposta = await http.post(
+      Uri.parse(_uploadEndpoint),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'pasta': pasta,
+        'nomeOriginal': nomeOriginal,
+        'contentType': contentType,
+        'base64': base64Encode(bytes),
+      }),
     );
 
-    return '$publicBaseUrl/$nomeArquivo';
-  }
+    if (resposta.statusCode != 200) {
+      throw Exception('Erro ao enviar arquivo: ${resposta.body}');
+    }
 
-  Future<void> excluir(String urlOuChave) async {
-    final chave = urlOuChave.startsWith('http')
-        ? urlOuChave.replaceFirst('$publicBaseUrl/', '')
-        : urlOuChave;
-    await _client.removeObject(bucket, chave);
+    final dados = jsonDecode(resposta.body) as Map<String, dynamic>;
+    return dados['publicUrl'] as String;
   }
 
   String _contentTypePorExtensao(String extensao) {
@@ -89,12 +70,6 @@ class R2StorageService {
         return 'image/webp';
       case 'gif':
         return 'image/gif';
-      case 'mp4':
-        return 'video/mp4';
-      case 'mov':
-        return 'video/quicktime';
-      case 'webm':
-        return 'video/webm';
       default:
         return 'application/octet-stream';
     }

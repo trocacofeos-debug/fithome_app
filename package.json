@@ -1,0 +1,8 @@
+{
+  "name": "fithome-api",
+  "private": true,
+  "description": "Dependências das Vercel Serverless Functions (pasta /api) — não tem relação com o app Flutter em si.",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.687.0"
+  }
+}
