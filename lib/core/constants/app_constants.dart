@@ -80,3 +80,14 @@ class FirestoreCollections {
 class AppConstants {
   static const appName = 'FitHome Pro';
 }
+
+/// Lê um campo booleano do Firestore de forma tolerante: aceita `bool` de
+/// verdade, mas também `"true"`/`"false"` como texto (pode acontecer se o
+/// campo foi criado/editado manualmente no Firestore Console como string
+/// em vez de boolean, o que quebraria o app com um TypeError em runtime).
+bool lerBoolFirestore(dynamic valor, {required bool padrao}) {
+  if (valor == null) return padrao;
+  if (valor is bool) return valor;
+  if (valor is String) return valor.toLowerCase() == 'true';
+  return padrao;
+}

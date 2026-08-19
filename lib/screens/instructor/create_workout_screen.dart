@@ -41,6 +41,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
   final _duracaoCtrl = TextEditingController(text: '30');
 
   String _nivel = 'iniciante';
+  String? _diaDaSemana; // null = sem dia fixo
   String _categoria = 'funcional';
   Uint8List? _capaBytes;
   String? _capaNomeArquivo;
@@ -76,6 +77,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
       _capaUrlExistente = treino.capaUrl;
       _alunoId = treino.alunoId;
       _alunoNome = treino.alunoNome;
+      _diaDaSemana = treino.diaDaSemana;
       _exercicios.addAll(treino.exercicios.map((e) => _ExercicioForm.fromModel(e)));
     });
   }
@@ -96,6 +98,8 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
             _seletorCapa(),
             const SizedBox(height: 16),
             _seletorDestinatario(),
+            const SizedBox(height: 16),
+            _seletorDiaDaSemana(),
             const SizedBox(height: 16),
             TextFormField(
               controller: _tituloCtrl,
@@ -190,6 +194,51 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _seletorDiaDaSemana() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('DIA DA SEMANA (OPCIONAL)',
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2, color: AppColors.mutedForeground)),
+          const SizedBox(height: 4),
+          const Text('Se definir, esse treino aparece agrupado nesse dia na agenda semanal do aluno.',
+              style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _chipDia(null, 'Nenhum'),
+                ...diasDaSemana.map((d) => _chipDia(d, rotuloDiaDaSemana(d))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chipDia(String? dia, String label) {
+    final selecionado = _diaDaSemana == dia;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selecionado,
+        onSelected: (_) => setState(() => _diaDaSemana = dia),
+        selectedColor: AppColors.instrutorColor.withOpacity(0.2),
       ),
     );
   }
@@ -613,6 +662,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
         createdAt: DateTime.now(),
         alunoId: _alunoId,
         alunoNome: _alunoNome,
+        diaDaSemana: _diaDaSemana,
       );
 
       if (widget.workoutId != null) {

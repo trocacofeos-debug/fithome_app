@@ -37,6 +37,10 @@ class _StudentWorkoutsTabState extends State<StudentWorkoutsTab> {
   String _busca = '';
   String? _categoriaFiltro; // null = todas
 
+  // Dia selecionado na agenda semanal — começa em "hoje". "todos" mostra
+  // tudo, sem filtrar por dia.
+  late String _diaSelecionado = diaDeHoje();
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -46,6 +50,8 @@ class _StudentWorkoutsTabState extends State<StudentWorkoutsTab> {
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
       children: [
         const SectionTitle('Meus Treinos'),
+        const SizedBox(height: 14),
+        _seletorDiaSemanal(),
         const SizedBox(height: 14),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -92,7 +98,11 @@ class _StudentWorkoutsTabState extends State<StudentWorkoutsTab> {
               return Padding(
                 padding: const EdgeInsets.only(top: 20),
                 child: Text(
-                  snapshot.data!.isEmpty ? 'Nenhum treino disponível no momento.' : 'Nenhum treino encontrado.',
+                  snapshot.data!.isEmpty
+                      ? 'Nenhum treino disponível no momento.'
+                      : _diaSelecionado != 'todos'
+                          ? 'Nenhum treino para ${rotuloDiaDaSemana(_diaSelecionado)}.'
+                          : 'Nenhum treino encontrado.',
                   style: const TextStyle(color: AppColors.mutedForeground),
                 ),
               );
@@ -103,6 +113,62 @@ class _StudentWorkoutsTabState extends State<StudentWorkoutsTab> {
           },
         ),
       ],
+    );
+  }
+
+  /// Faixa de dias (Hoje + resto da semana) — como uma mini-agenda. Toca
+  /// num dia pra ver só os treinos daquele dia; "Todos" tira o filtro.
+  Widget _seletorDiaSemanal() {
+    return SizedBox(
+      height: 60,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _chipDia('todos', 'Todos', null),
+          ...diasDaSemana.map((d) => _chipDia(d, rotuloDiaDaSemana(d).substring(0, 3), d)),
+        ],
+      ),
+    );
+  }
+
+  Widget _chipDia(String valor, String label, String? diaReal) {
+    final selecionado = _diaSelecionado == valor;
+    final ehHoje = diaReal != null && diaReal == diaDeHoje();
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: InkWell(
+        onTap: () => setState(() => _diaSelecionado = valor),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 56,
+          decoration: BoxDecoration(
+            color: selecionado ? AppColors.primary : AppColors.card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: selecionado ? AppColors.primary : AppColors.border),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(label.toUpperCase(),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: selecionado ? AppColors.primaryForeground : AppColors.mutedForeground)),
+              if (ehHoje) ...[
+                const SizedBox(height: 2),
+                Container(
+                  width: 4,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: selecionado ? AppColors.primaryForeground : AppColors.primary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -123,6 +189,12 @@ class _StudentWorkoutsTabState extends State<StudentWorkoutsTab> {
     return treinos.where((t) {
       if (_busca.isNotEmpty && !t.titulo.toLowerCase().contains(_busca)) return false;
       if (_categoriaFiltro != null && t.categoria != _categoriaFiltro) return false;
+      // Filtro de dia: treinos sem dia fixo (diaDaSemana == null) sempre
+      // aparecem, não importa o dia selecionado — só ficam de fora quando
+      // um dia específico está marcado E o treino é de outro dia.
+      if (_diaSelecionado != 'todos' && t.diaDaSemana != null && t.diaDaSemana != _diaSelecionado) {
+        return false;
+      }
       return true;
     }).toList();
   }
@@ -171,6 +243,10 @@ class _WorkoutRow extends StatelessWidget {
                     if (treino.isIndividual) ...[
                       const SizedBox(width: 6),
                       const StatusBadge(label: 'Personalizado', color: AppColors.primary),
+                    ],
+                    if (treino.diaDaSemana != null) ...[
+                      const SizedBox(width: 6),
+                      StatusBadge(label: rotuloDiaDaSemana(treino.diaDaSemana!), color: AppColors.mutedForeground),
                     ],
                   ],
                 ),

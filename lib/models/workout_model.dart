@@ -1,5 +1,34 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../core/constants/app_constants.dart';
 import 'exercise_model.dart';
+
+/// Dias da semana válidos para o campo diaDaSemana, na ordem
+/// segunda→domingo (bate com DateTime.weekday: 1=segunda...7=domingo).
+const diasDaSemana = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'];
+
+String rotuloDiaDaSemana(String dia) {
+  switch (dia) {
+    case 'segunda':
+      return 'Segunda';
+    case 'terca':
+      return 'Terça';
+    case 'quarta':
+      return 'Quarta';
+    case 'quinta':
+      return 'Quinta';
+    case 'sexta':
+      return 'Sexta';
+    case 'sabado':
+      return 'Sábado';
+    case 'domingo':
+      return 'Domingo';
+    default:
+      return dia;
+  }
+}
+
+/// Chave (mesmo formato de [diasDaSemana]) do dia de hoje.
+String diaDeHoje() => diasDaSemana[DateTime.now().weekday - 1];
 
 class WorkoutModel {
   final String id;
@@ -21,6 +50,11 @@ class WorkoutModel {
   final String? alunoId;
   final String? alunoNome;
 
+  /// Dia da semana em que esse treino deve ser feito (ex: 'segunda').
+  /// Null significa "sem dia fixo" — continua aparecendo todo dia na
+  /// lista geral, só não some quando o aluno filtra por um dia específico.
+  final String? diaDaSemana;
+
   WorkoutModel({
     required this.id,
     required this.titulo,
@@ -36,6 +70,7 @@ class WorkoutModel {
     this.publicado = true,
     this.alunoId,
     this.alunoNome,
+    this.diaDaSemana,
   });
 
   bool get isIndividual => alunoId != null;
@@ -55,9 +90,10 @@ class WorkoutModel {
           .toList(),
       duracaoMinutos: map['duracaoMinutos'] ?? 30,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      publicado: map['publicado'] ?? true,
+      publicado: lerBoolFirestore(map['publicado'], padrao: true),
       alunoId: map['alunoId'],
       alunoNome: map['alunoNome'],
+      diaDaSemana: map['diaDaSemana'],
     );
   }
 
@@ -76,6 +112,7 @@ class WorkoutModel {
       'publicado': publicado,
       'alunoId': alunoId,
       'alunoNome': alunoNome,
+      'diaDaSemana': diaDaSemana,
     };
   }
 }
