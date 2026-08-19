@@ -1,6 +1,10 @@
+// ignore_for_file: unused_import
+
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
 import '../core/constants/app_constants.dart';
+import '../models/workout_model.dart';
 import '../screens/splash_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
@@ -10,6 +14,7 @@ import '../screens/instructor/instructor_panel.dart';
 import '../screens/instructor/create_workout_screen.dart';
 import '../screens/student/student_panel.dart';
 import '../screens/student/workout_detail_screen.dart';
+import '../screens/student/workout_player_screen.dart';
 
 GoRouter buildRouter(AuthProvider authProvider) {
   return GoRouter(
@@ -59,6 +64,10 @@ GoRouter buildRouter(AuthProvider authProvider) {
       GoRoute(
         path: '/aluno/treino/:id',
         builder: (c, s) => WorkoutDetailScreen(workoutId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/aluno/treino/:id/executar',
+        builder: (c, s) => WorkoutPlayerScreen(treino: s.extra as WorkoutModel),
       ),
 
       // ---- INSTRUTOR ----

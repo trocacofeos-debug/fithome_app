@@ -1,10 +1,9 @@
-// ignore_for_file: use_build_context_synchronously, deprecated_member_use
+// ignore_for_file: deprecated_member_use
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/workout_model.dart';
-import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../shared/gif_viewer_screen.dart';
 
@@ -19,8 +18,6 @@ class WorkoutDetailScreen extends StatefulWidget {
 
 class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
   final _fsService = FirestoreService();
-  bool _concluindo = false;
-  bool _concluidoAgora = false;
   late final Future<WorkoutModel> _treinoFuture;
 
   @override
@@ -110,54 +107,21 @@ class _WorkoutDetailScreenState extends State<WorkoutDetailScreen> {
             future: _treinoFuture,
             builder: (context, snapshot) {
               final treino = snapshot.data;
-              final concluido = _concluidoAgora;
               return ElevatedButton.icon(
-                onPressed: (treino == null || _concluindo || concluido)
+                onPressed: treino == null || treino.exercicios.isEmpty
                     ? null
-                    : () => _concluirTreino(context, treino),
-                icon: _concluindo
-                    ? const SizedBox(
-                        height: 16, width: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryForeground))
-                    : Icon(concluido ? Icons.check_circle : Icons.check_circle_outline),
-                label: Text(concluido ? 'TREINO CONCLUÍDO' : 'CONCLUIR TREINO'),
+                    // Navega via go_router (context.push), não Navigator.push
+                    // direto — é o padrão usado no resto do app, e evita a
+                    // tela abrir dentro de um Navigator aninhado menor.
+                    : () => context.push('/aluno/treino/${treino.id}/executar', extra: treino),
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('COMEÇAR TREINO'),
               );
             },
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _concluirTreino(BuildContext context, WorkoutModel treino) async {
-    final auth = context.read<AuthProvider>();
-    final usuario = auth.usuario;
-    if (usuario == null) return;
-
-    setState(() => _concluindo = true);
-    try {
-      await _fsService.registrarConclusaoTreino(
-        alunoId: usuario.id,
-        alunoNome: usuario.nome,
-        treino: treino,
-      );
-      if (mounted) {
-        setState(() {
-          _concluindo = false;
-          _concluidoAgora = true;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Treino registrado no seu progresso 💪'), backgroundColor: AppColors.emerald),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _concluindo = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao registrar: $e'), backgroundColor: AppColors.destructive),
-        );
-      }
-    }
   }
 
   void _abrirGif(BuildContext context, String url, String titulo) {

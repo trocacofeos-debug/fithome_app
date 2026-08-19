@@ -3,7 +3,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/theme/app_theme.dart';
@@ -114,7 +113,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _nivel,
+                    initialValue: _nivel,
                     decoration: const InputDecoration(labelText: 'Nível'),
                     items: const [
                       DropdownMenuItem(value: 'iniciante', child: Text('Iniciante')),
@@ -127,7 +126,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: _categoria,
+                    initialValue: _categoria,
                     decoration: const InputDecoration(labelText: 'Categoria'),
                     items: const [
                       DropdownMenuItem(value: 'funcional', child: Text('Funcional')),
@@ -428,33 +427,86 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            // Alterna entre "por repetições" e "por tempo" (ex: prancha)
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: ex.seriesCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Séries'),
+                  child: _chipTipo(
+                    selecionado: ex.tipo == 'repeticoes',
+                    label: 'Repetições',
+                    icone: Icons.repeat,
+                    onTap: () => setState(() => ex.tipo = 'repeticoes'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: TextFormField(
-                    controller: ex.repeticoesCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Repetições'),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: ex.descansoCtrl,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Descanso (s)'),
+                  child: _chipTipo(
+                    selecionado: ex.tipo == 'tempo',
+                    label: 'Por tempo',
+                    icone: Icons.timer_outlined,
+                    onTap: () => setState(() => ex.tipo = 'tempo'),
                   ),
                 ),
               ],
             ),
+            const SizedBox(height: 10),
+            if (ex.tipo == 'repeticoes')
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: ex.seriesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Séries'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: ex.repeticoesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Repetições'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: ex.descansoCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Descanso (s)'),
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: ex.seriesCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Séries'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: ex.duracaoCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Duração (s)', hintText: 'ex: 30'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: ex.descansoCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Descanso (s)'),
+                    ),
+                  ),
+                ],
+              ),
             const SizedBox(height: 8),
             if (ex.gifBytes != null)
               ClipRRect(
@@ -474,6 +526,29 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
                   ? 'Trocar GIF demonstrativo'
                   : 'Adicionar GIF demonstrativo'),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chipTipo({required bool selecionado, required String label, required IconData icone, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selecionado ? AppColors.primary.withOpacity(0.15) : AppColors.secondary,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: selecionado ? AppColors.primary : Colors.transparent),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icone, size: 15, color: selecionado ? AppColors.primary : AppColors.mutedForeground),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: selecionado ? AppColors.primary : AppColors.mutedForeground)),
           ],
         ),
       ),
@@ -515,8 +590,10 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
         exerciciosModel.add(ExerciseModel(
           id: ex.id,
           nome: ex.nomeCtrl.text,
+          tipo: ex.tipo,
           series: int.tryParse(ex.seriesCtrl.text) ?? 3,
           repeticoes: int.tryParse(ex.repeticoesCtrl.text) ?? 12,
+          duracaoSegundos: ex.tipo == 'tempo' ? (int.tryParse(ex.duracaoCtrl.text) ?? 30) : null,
           descansoSegundos: int.tryParse(ex.descansoCtrl.text) ?? 60,
           gifUrl: gifUrl,
         ));
@@ -553,7 +630,7 @@ class _CreateWorkoutScreenState extends State<CreateWorkoutScreen> {
         }
       }
 
-      if (mounted) context.go('/instrutor');
+      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -571,7 +648,9 @@ class _ExercicioForm {
   final nomeCtrl = TextEditingController();
   final seriesCtrl = TextEditingController(text: '3');
   final repeticoesCtrl = TextEditingController(text: '12');
+  final duracaoCtrl = TextEditingController(text: '30');
   final descansoCtrl = TextEditingController(text: '60');
+  String tipo = 'repeticoes';
   Uint8List? gifBytes;
   String? gifNomeArquivo;
   String? gifUrlExistente;
@@ -580,8 +659,10 @@ class _ExercicioForm {
 
   _ExercicioForm.fromModel(ExerciseModel e) : id = e.id {
     nomeCtrl.text = e.nome;
+    tipo = e.tipo;
     seriesCtrl.text = e.series.toString();
     repeticoesCtrl.text = e.repeticoes.toString();
+    duracaoCtrl.text = (e.duracaoSegundos ?? 30).toString();
     descansoCtrl.text = e.descansoSegundos.toString();
     gifUrlExistente = e.gifUrl;
   }
