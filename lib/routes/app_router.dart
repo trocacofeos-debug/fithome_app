@@ -15,6 +15,7 @@ import '../screens/instructor/create_workout_screen.dart';
 import '../screens/student/student_panel.dart';
 import '../screens/student/workout_detail_screen.dart';
 import '../screens/student/workout_player_screen.dart';
+import '../screens/account_blocked_screen.dart';
 
 GoRouter buildRouter(AuthProvider authProvider) {
   return GoRouter(
@@ -30,6 +31,18 @@ GoRouter buildRouter(AuthProvider authProvider) {
 
       if (status == AuthStatus.naoAutenticado) {
         return indoParaAuth ? null : '/login';
+      }
+
+      // Conta desativada pelo admin: prende a pessoa na tela de bloqueio,
+      // não importa pra onde ela tente navegar. Se o admin reativar, o
+      // próximo check já libera sozinho (a stream do usuário atualiza em
+      // tempo real, sem precisar deslogar/logar de novo).
+      if (authProvider.contaBloqueada) {
+        return state.matchedLocation == '/bloqueado' ? null : '/bloqueado';
+      }
+      if (state.matchedLocation == '/bloqueado') {
+        // Foi desbloqueado nesse meio tempo -> manda pra home certa.
+        return _rotaInicialPorRole(authProvider.usuario!.role);
       }
 
       // Autenticado
@@ -56,6 +69,7 @@ GoRouter buildRouter(AuthProvider authProvider) {
       GoRoute(path: '/login', builder: (c, s) => const LoginScreen()),
       GoRoute(path: '/cadastro', builder: (c, s) => const RegisterScreen()),
       GoRoute(path: '/esqueci-senha', builder: (c, s) => const ForgotPasswordScreen()),
+      GoRoute(path: '/bloqueado', builder: (c, s) => const AccountBlockedScreen()),
 
       // ---- ALUNO ----
       // O painel do aluno gerencia suas próprias abas internamente

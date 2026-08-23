@@ -3,10 +3,6 @@ import '../core/constants/app_constants.dart';
 import '../models/subscription_model.dart';
 
 /// Centraliza toda a lógica de gestão de assinaturas.
-///
-/// Cobrança automática (Stripe/RevenueCat/Play Billing) pode ser plugada
-/// aqui depois: basta chamar `renovar()` a partir do webhook do provedor
-/// de pagamento, mantendo o resto do app (telas, streams) inalterado.
 class SubscriptionService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
@@ -58,20 +54,4 @@ class SubscriptionService {
   }
 
   Future<void> cancelar(String id) => atualizarStatus(id, SubscriptionStatus.cancelada);
-
-  /// Deve ser chamada periodicamente (ex: Cloud Function agendada todo dia)
-  /// para marcar como "atrasada" quem passou do vencimento sem renovar.
-  Future<void> marcarAtrasadasAutomaticamente() async {
-    final agora = Timestamp.now();
-    final vencidas = await _col
-        .where('status', isEqualTo: SubscriptionStatus.ativa.value)
-        .where('proximoVencimento', isLessThan: agora)
-        .get();
-
-    final batch = _db.batch();
-    for (final doc in vencidas.docs) {
-      batch.update(doc.reference, {'status': SubscriptionStatus.atrasada.value});
-    }
-    await batch.commit();
-  }
 }

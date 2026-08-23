@@ -142,7 +142,7 @@ class FirestoreService {
   // ---------- PROGRESSO DE TREINO ----------
 
   /// Registra que um aluno concluiu um treino. Chamado pelo botão
-  /// "Concluir treino" na tela de detalhe.
+  /// "Concluir treino" na tela de execução guiada.
   Future<void> registrarConclusaoTreino({
     required String alunoId,
     required String alunoNome,
@@ -182,6 +182,15 @@ class FirestoreService {
         .map((snap) => snap.docs.map((d) => WorkoutProgressModel.fromMap(d.id, d.data())).toList());
   }
 
+  /// Todo o histórico de treinos concluídos no app inteiro, sem filtro —
+  /// usado só no dashboard do admin, pra métricas gerais da plataforma.
+  Stream<List<WorkoutProgressModel>> streamTodoProgresso() {
+    return _db
+        .collection(FirestoreCollections.workoutProgress)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => WorkoutProgressModel.fromMap(d.id, d.data())).toList());
+  }
+
   // ---------- AGENDA (AGENDAMENTOS DO INSTRUTOR) ----------
 
   Future<String> criarAgendamento(AppointmentModel agendamento) async {
@@ -215,9 +224,7 @@ class FirestoreService {
         .map((snap) => snap.docs.map((d) => AppointmentModel.fromMap(d.id, d.data())).toList());
   }
 
-  /// Todos os agendamentos futuros de um aluno com um instrutor específico
-  /// (não usado ainda na UI do aluno, mas pronto para uma futura tela de
-  /// "meus agendamentos").
+  /// Todos os agendamentos de um aluno com qualquer instrutor.
   Stream<List<AppointmentModel>> streamAgendaDoAluno(String alunoId) {
     return _db
         .collection(FirestoreCollections.appointments)

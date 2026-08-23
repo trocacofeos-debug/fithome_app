@@ -8,9 +8,11 @@ import '../../../models/workout_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
+import '../instructor_workouts_by_group_screen.dart';
 
-enum _FiltroTreino { todos, publicados, rascunhos, individuais }
-
+/// Em vez de uma lista única de treinos, mostra os alunos que têm treino
+/// individual (mais um grupo "Geral" para os treinos sem dono específico)
+/// — tocando num aluno, mostra só os treinos dele.
 class InstructorWorkoutsTab extends StatefulWidget {
   const InstructorWorkoutsTab({super.key});
 
@@ -19,13 +21,12 @@ class InstructorWorkoutsTab extends StatefulWidget {
 }
 
 class _InstructorWorkoutsTabState extends State<InstructorWorkoutsTab> {
-  final _fsService = FirestoreService();
   String _busca = '';
-  _FiltroTreino _filtro = _FiltroTreino.todos;
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final fsService = FirestoreService();
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 90),
@@ -33,7 +34,7 @@ class _InstructorWorkoutsTabState extends State<InstructorWorkoutsTab> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const SectionTitle('Treinos Criados'),
+            const SectionTitle('Treinos'),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.instrutorColor,
@@ -58,29 +59,16 @@ class _InstructorWorkoutsTabState extends State<InstructorWorkoutsTab> {
             style: const TextStyle(color: AppColors.foreground, fontSize: 14),
             decoration: const InputDecoration(
               border: InputBorder.none,
-              hintText: 'Buscar treino...',
+              hintText: 'Buscar aluno...',
               hintStyle: TextStyle(color: AppColors.mutedForeground),
               prefixIcon: Icon(Icons.search, size: 18, color: AppColors.mutedForeground),
             ),
             onChanged: (v) => setState(() => _busca = v.toLowerCase()),
           ),
         ),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 34,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: [
-              _chipFiltro(_FiltroTreino.todos, 'Todos'),
-              _chipFiltro(_FiltroTreino.publicados, 'Publicados'),
-              _chipFiltro(_FiltroTreino.rascunhos, 'Rascunhos'),
-              _chipFiltro(_FiltroTreino.individuais, 'Individuais'),
-            ],
-          ),
-        ),
         const SizedBox(height: 14),
         StreamBuilder(
-          stream: _fsService.streamTreinos(instrutorId: auth.usuario!.id),
+          stream: fsService.streamTreinos(instrutorId: auth.usuario!.id),
           builder: (context, snapshot) {
             if (snapshot.hasError) return StreamErrorMessage(erro: snapshot.error);
             if (!snapshot.hasData) {
@@ -89,190 +77,131 @@ class _InstructorWorkoutsTabState extends State<InstructorWorkoutsTab> {
                 child: Center(child: CircularProgressIndicator(color: AppColors.instrutorColor)),
               );
             }
-            final treinos = _aplicarFiltros(snapshot.data!);
+
+            final treinos = snapshot.data!;
+            final geral = treinos.where((t) => !t.isIndividual).toList();
+
+            final porAluno = <String, List<WorkoutModel>>{};
+            final nomePorAluno = <String, String>{};
+            for (final t in treinos.where((t) => t.isIndividual)) {
+              porAluno.putIfAbsent(t.alunoId!, () => []).add(t);
+              nomePorAluno[t.alunoId!] = t.alunoNome ?? 'Aluno';
+            }
+            final alunosOrdenados = porAluno.keys.toList()
+              ..sort((a, b) => (nomePorAluno[a] ?? '').compareTo(nomePorAluno[b] ?? ''));
+
+            // Aplica a busca por nome (não filtra "Geral", que não tem nome de aluno)
+            final alunosFiltrados = _busca.isEmpty
+                ? alunosOrdenados
+                : alunosOrdenados.where((id) => (nomePorAluno[id] ?? '').toLowerCase().contains(_busca)).toList();
+
             if (treinos.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.only(top: 30),
-                child: Text(
-                  snapshot.data!.isEmpty ? 'Você ainda não criou nenhum treino.' : 'Nenhum treino encontrado.',
-                  style: const TextStyle(color: AppColors.mutedForeground),
-                ),
+              return const Padding(
+                padding: EdgeInsets.only(top: 30),
+                child: Text('Você ainda não criou nenhum treino.', style: TextStyle(color: AppColors.mutedForeground)),
               );
             }
+
             return Column(
-              children: treinos.map((treino) => _TreinoCard(
-                    treino: treino,
-                    onEditar: () => context.push('/instrutor/editar-treino/${treino.id}'),
-                    onTogglePublicar: () => _fsService.atualizarTreino(treino.id, {'publicado': !treino.publicado}),
-                    onDuplicar: () => _duplicar(context, treino),
-                    onExcluir: () => _confirmarExclusao(context, treino),
-                  )).toList(),
+              children: [
+                if ('geral'.contains(_busca) || _busca.isEmpty)
+                  _GrupoCard(
+                    titulo: 'Geral',
+                    subtitulo: 'Visível para todos os alunos',
+                    icone: Icons.groups_outlined,
+                    corIcone: AppColors.primary,
+                    quantidade: geral.length,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const InstructorWorkoutsByGroupScreen(alunoId: null, tituloGrupo: 'Geral'),
+                      ),
+                    ),
+                  ),
+                ...alunosFiltrados.map((alunoId) => _GrupoCard(
+                      titulo: nomePorAluno[alunoId]!,
+                      subtitulo: 'Treinos individuais',
+                      icone: Icons.person_outline,
+                      corIcone: AppColors.instrutorColor,
+                      quantidade: porAluno[alunoId]!.length,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => InstructorWorkoutsByGroupScreen(alunoId: alunoId, tituloGrupo: nomePorAluno[alunoId]!),
+                        ),
+                      ),
+                    )),
+                if (alunosFiltrados.isEmpty && _busca.isNotEmpty && !'geral'.contains(_busca))
+                  const Padding(
+                    padding: EdgeInsets.only(top: 20),
+                    child: Text('Nenhum aluno encontrado.', style: TextStyle(color: AppColors.mutedForeground)),
+                  ),
+              ],
             );
           },
         ),
       ],
     );
   }
-
-  Widget _chipFiltro(_FiltroTreino valor, String label) {
-    final selecionado = _filtro == valor;
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selecionado,
-        onSelected: (_) => setState(() => _filtro = valor),
-        selectedColor: AppColors.instrutorColor.withOpacity(0.2),
-      ),
-    );
-  }
-
-  List<WorkoutModel> _aplicarFiltros(List<WorkoutModel> treinos) {
-    return treinos.where((t) {
-      if (_busca.isNotEmpty && !t.titulo.toLowerCase().contains(_busca)) return false;
-      switch (_filtro) {
-        case _FiltroTreino.publicados:
-          return t.publicado;
-        case _FiltroTreino.rascunhos:
-          return !t.publicado;
-        case _FiltroTreino.individuais:
-          return t.isIndividual;
-        case _FiltroTreino.todos:
-          return true;
-      }
-    }).toList();
-  }
-
-  Future<void> _duplicar(BuildContext context, WorkoutModel treino) async {
-    await _fsService.duplicarTreino(treino);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('"${treino.titulo}" duplicado como rascunho.')),
-      );
-    }
-  }
-
-  Future<void> _confirmarExclusao(BuildContext context, WorkoutModel treino) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir treino?'),
-        content: Text('"${treino.titulo}" será excluído permanentemente. Essa ação não pode ser desfeita.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Excluir'),
-          ),
-        ],
-      ),
-    );
-    if (confirmar == true) {
-      await _fsService.excluirTreino(treino.id);
-    }
-  }
 }
 
-class _TreinoCard extends StatelessWidget {
-  final WorkoutModel treino;
-  final VoidCallback onEditar;
-  final VoidCallback onTogglePublicar;
-  final VoidCallback onDuplicar;
-  final VoidCallback onExcluir;
+class _GrupoCard extends StatelessWidget {
+  final String titulo;
+  final String subtitulo;
+  final IconData icone;
+  final Color corIcone;
+  final int quantidade;
+  final VoidCallback onTap;
 
-  const _TreinoCard({
-    required this.treino,
-    required this.onEditar,
-    required this.onTogglePublicar,
-    required this.onDuplicar,
-    required this.onExcluir,
+  const _GrupoCard({
+    required this.titulo,
+    required this.subtitulo,
+    required this.icone,
+    required this.corIcone,
+    required this.quantidade,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: treino.capaUrl != null
-                    ? Image.network(treino.capaUrl!, width: 48, height: 48, fit: BoxFit.cover)
-                    : Container(
-                        width: 48,
-                        height: 48,
-                        color: AppColors.secondary,
-                        child: const Icon(Icons.fitness_center, size: 20, color: AppColors.mutedForeground),
-                      ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(treino.titulo, style: condensed(fontSize: 17)),
-                    Text('${treino.duracaoMinutos} min · ${treino.nivel}',
-                        style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
-                    if (treino.isIndividual) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          const Icon(Icons.person, size: 12, color: AppColors.instrutorColor),
-                          const SizedBox(width: 4),
-                          Text('Individual · ${treino.alunoNome}',
-                              style: const TextStyle(fontSize: 11, color: AppColors.instrutorColor, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              PopupMenuButton<String>(
-                color: AppColors.card,
-                icon: const Icon(Icons.more_vert, color: AppColors.mutedForeground, size: 18),
-                onSelected: (v) {
-                  if (v == 'editar') onEditar();
-                  if (v == 'publicar') onTogglePublicar();
-                  if (v == 'duplicar') onDuplicar();
-                  if (v == 'excluir') onExcluir();
-                },
-                itemBuilder: (_) => [
-                  const PopupMenuItem(value: 'editar', child: Text('Editar')),
-                  PopupMenuItem(value: 'publicar', child: Text(treino.publicado ? 'Despublicar' : 'Publicar')),
-                  const PopupMenuItem(value: 'duplicar', child: Text('Duplicar')),
-                  const PopupMenuItem(value: 'excluir', child: Text('Excluir', style: TextStyle(color: AppColors.destructive))),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: corIcone.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+              child: Icon(icone, color: corIcone, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  Text(subtitulo, style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
                 ],
               ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Container(height: 1, color: AppColors.border),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.fitness_center, size: 13, color: AppColors.mutedForeground),
-              const SizedBox(width: 6),
-              Text('${treino.exercicios.length} exercícios',
-                  style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
-              const Spacer(),
-              StatusBadge(
-                label: treino.publicado ? 'Publicado' : 'Rascunho',
-                color: treino.publicado ? AppColors.emerald : AppColors.mutedForeground,
-              ),
-            ],
-          ),
-        ],
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(20)),
+              child: Text('$quantidade', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+            ),
+            const SizedBox(width: 6),
+            const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
+          ],
+        ),
       ),
     );
   }

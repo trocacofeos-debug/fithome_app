@@ -111,27 +111,48 @@ class _UserRow extends StatelessWidget {
   final FirestoreService fsService;
   final PaymentService paymentService;
 
-  const _UserRow({required this.usuario, required this.subService, required this.fsService, required this.paymentService});
+  const _UserRow({
+    required this.usuario,
+    required this.subService,
+    required this.fsService,
+    required this.paymentService,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final bloqueado = !usuario.ativo;
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: bloqueado ? AppColors.destructive.withOpacity(0.4) : AppColors.border),
       ),
       child: Row(
         children: [
-          InitialsAvatar(initials: usuario.nome.isNotEmpty ? usuario.nome.substring(0, 1).toUpperCase() : '?', size: 34),
+          InitialsAvatar(
+            initials: usuario.nome.isNotEmpty ? usuario.nome.substring(0, 1).toUpperCase() : '?',
+            size: 34,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(usuario.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(usuario.nome,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    if (bloqueado) ...[
+                      const SizedBox(width: 6),
+                      const StatusBadge(label: 'Bloqueado', color: AppColors.destructive),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 2),
                 Wrap(
                   spacing: 6,
@@ -156,13 +177,9 @@ class _UserRow extends StatelessWidget {
               ],
             ),
           ),
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => _abrirDetalhes(context),
-                icon: const Icon(Icons.settings_outlined, size: 18, color: AppColors.mutedForeground),
-              ),
-            ],
+          IconButton(
+            onPressed: () => _abrirDetalhes(context),
+            icon: const Icon(Icons.settings_outlined, size: 18, color: AppColors.mutedForeground),
           ),
         ],
       ),
@@ -173,7 +190,12 @@ class _UserRow extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => _UserDetailSheet(usuario: usuario, subService: subService, fsService: fsService, paymentService: paymentService),
+      builder: (ctx) => _UserDetailSheet(
+        usuario: usuario,
+        subService: subService,
+        fsService: fsService,
+        paymentService: paymentService,
+      ),
     );
   }
 }
@@ -213,123 +235,167 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
         left: 20, right: 20, top: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              InitialsAvatar(initials: widget.usuario.nome.substring(0, 1).toUpperCase(), size: 44),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.usuario.nome, style: condensed(fontSize: 20)),
-                    Text(widget.usuario.email, style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text('PAPEL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
-          const SizedBox(height: 6),
-          DropdownButtonFormField<UserRole>(
-            value: _role,
-            dropdownColor: AppColors.card,
-            items: UserRole.values.map((r) => DropdownMenuItem(value: r, child: Text(r.label))).toList(),
-            onChanged: (r) async {
-              if (r == null) return;
-              setState(() => _role = r);
-              await widget.fsService.atualizarRole(widget.usuario.id, r);
-            },
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.secondary,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
-                const Expanded(child: Text('Conta ativa', style: TextStyle(fontWeight: FontWeight.w600))),
-                Switch(
-                  value: _ativo,
-                  onChanged: (v) async {
-                    setState(() => _ativo = v);
-                    await widget.fsService.ativarDesativarUsuario(widget.usuario.id, v);
-                  },
+                InitialsAvatar(initials: widget.usuario.nome.substring(0, 1).toUpperCase(), size: 44),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.usuario.nome, style: condensed(fontSize: 20)),
+                      Text(widget.usuario.email, style: const TextStyle(fontSize: 12, color: AppColors.mutedForeground)),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-          if (_role == UserRole.aluno) ...[
             const SizedBox(height: 20),
-            const Text('ASSINATURA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
-            const SizedBox(height: 10),
-            StreamBuilder(
-              stream: widget.subService.streamDoAluno(widget.usuario.id),
-              builder: (context, snap) {
-                if (snap.hasError) return StreamErrorMessage(erro: snap.error);
-                final assinatura = snap.data;
-                if (assinatura == null) {
-                  return ElevatedButton(
-                    onPressed: () => _atribuirPlano(context),
-                    child: const Text('Atribuir plano'),
-                  );
-                }
-                if (assinatura.cobrancaAutomatica) {
+            const Text('PAPEL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+            const SizedBox(height: 6),
+            DropdownButtonFormField<UserRole>(
+              initialValue: _role,
+              dropdownColor: AppColors.card,
+              items: UserRole.values.map((r) => DropdownMenuItem(value: r, child: Text(r.label))).toList(),
+              onChanged: (r) async {
+                if (r == null) return;
+                setState(() => _role = r);
+                await widget.fsService.atualizarRole(widget.usuario.id, r);
+              },
+            ),
+            const SizedBox(height: 20),
+
+            // ---- Bloqueio de acesso: agora derruba a sessão de verdade ----
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: _ativo ? AppColors.secondary : AppColors.destructive.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: _ativo ? Colors.transparent : AppColors.destructive.withOpacity(0.4)),
+              ),
+              child: Row(
+                children: [
+                  Icon(_ativo ? Icons.lock_open_outlined : Icons.lock_outline,
+                      size: 18, color: _ativo ? AppColors.mutedForeground : AppColors.destructive),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_ativo ? 'Acesso liberado' : 'Acesso bloqueado',
+                            style: TextStyle(fontWeight: FontWeight.w700, color: _ativo ? AppColors.foreground : AppColors.destructive)),
+                        Text(
+                          _ativo
+                              ? 'A pessoa consegue entrar normalmente.'
+                              : 'A pessoa é desconectada agora e não consegue mais entrar.',
+                          style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Switch(
+                    value: _ativo,
+                    onChanged: (v) async {
+                      setState(() => _ativo = v);
+                      await widget.fsService.ativarDesativarUsuario(widget.usuario.id, v);
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            if (_role == UserRole.aluno) ...[
+              const SizedBox(height: 20),
+              const Text('ASSINATURA', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+              const SizedBox(height: 10),
+              StreamBuilder(
+                stream: widget.subService.streamDoAluno(widget.usuario.id),
+                builder: (context, snap) {
+                  if (snap.hasError) return StreamErrorMessage(erro: snap.error);
+                  final assinatura = snap.data;
+                  if (assinatura == null) {
+                    return ElevatedButton.icon(
+                      onPressed: () => _atribuirPlano(context),
+                      icon: const Icon(Icons.add_card_outlined),
+                      label: const Text('Ativar plano para esse aluno'),
+                    );
+                  }
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Cobrança automática ativa — renovação é feita pelo Asaas.',
-                          style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(foregroundColor: AppColors.destructive),
-                          onPressed: () async {
-                            try {
-                              await widget.paymentService.cancelarAssinatura(assinatura.id);
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('$e'), backgroundColor: AppColors.destructive),
-                                );
-                              }
-                            }
-                          },
-                          child: const Text('Cancelar no Asaas'),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(12)),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(assinatura.planoNome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('R\$ ${assinatura.valor.toStringAsFixed(2)}/mês',
+                                      style: const TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+                                ],
+                              ),
+                            ),
+                            StatusBadge.status(assinatura.status.label),
+                          ],
                         ),
                       ),
+                      const SizedBox(height: 10),
+                      if (assinatura.cobrancaAutomatica) ...[
+                        const Text('Cobrança automática ativa — renovação é feita pelo Asaas.',
+                            style: TextStyle(fontSize: 11, color: AppColors.mutedForeground)),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(foregroundColor: AppColors.destructive),
+                            onPressed: () async {
+                              try {
+                                await widget.paymentService.cancelarAssinatura(assinatura.id);
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('$e'), backgroundColor: AppColors.destructive),
+                                  );
+                                }
+                              }
+                            },
+                            child: const Text('Cancelar no Asaas'),
+                          ),
+                        ),
+                      ] else
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => widget.subService.renovar(assinatura.id, diasAdicionais: 30),
+                                child: const Text('Renovar +30d'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: OutlinedButton(
+                                style: OutlinedButton.styleFrom(foregroundColor: AppColors.destructive),
+                                onPressed: () => widget.subService.cancelar(assinatura.id),
+                                child: const Text('Cancelar'),
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   );
-                }
-                return Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () => widget.subService.renovar(assinatura.id, diasAdicionais: 30),
-                        child: const Text('Renovar +30d'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(foregroundColor: AppColors.destructive),
-                        onPressed: () => widget.subService.cancelar(assinatura.id),
-                        child: const Text('Cancelar'),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
+                },
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -340,6 +406,9 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
       builder: (ctx) => StreamBuilder(
         stream: widget.fsService.streamPlanos(),
         builder: (context, snap) {
+          if (snap.hasError) {
+            return SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: StreamErrorMessage(erro: snap.error)));
+          }
           final planos = snap.data ?? [];
           return SafeArea(
             child: Padding(

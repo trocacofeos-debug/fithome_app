@@ -14,6 +14,12 @@ class AuthProvider extends ChangeNotifier {
   UserModel? usuario;
   String? erro;
 
+  /// true quando o usuário está autenticado só que com a conta desativada
+  /// pelo admin — o roteador usa isso pra prender a pessoa numa tela de
+  /// bloqueio, sem deslogar (assim, se o admin reativar, ela volta a
+  /// navegar normalmente sem precisar logar de novo).
+  bool get contaBloqueada => usuario != null && !usuario!.ativo;
+
   AuthProvider() {
     _authService.authStateChanges.listen(_onAuthChanged);
   }
@@ -30,8 +36,9 @@ class AuthProvider extends ChangeNotifier {
     }
 
     // Assina o documento do usuário em tempo real: qualquer alteração no
-    // perfil (pela tela "Meu Perfil", ou por um admin) já reflete no app
-    // inteiro na hora, sem precisar deslogar e logar de novo.
+    // perfil (edição própria, mudança de papel, ativar/desativar conta
+    // pelo admin) já reflete no app inteiro na hora, sem precisar deslogar
+    // e logar de novo.
     _userSub = _authService.userDataStream(firebaseUser.uid).listen(
       (dados) {
         if (dados != null) {

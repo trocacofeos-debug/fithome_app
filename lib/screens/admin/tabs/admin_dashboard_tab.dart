@@ -19,48 +19,96 @@ class AdminDashboardTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
       children: [
-        const Text('ADMINISTRAÇÃO',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1.5, color: AppColors.mutedForeground)),
-        const SizedBox(height: 2),
-        Text('DASHBOARD', style: condensed(fontSize: 30)),
-        const SizedBox(height: 18),
+        const SectionTitle('Visão Geral'),
+        const SizedBox(height: 14),
 
+        // ---- Linha 1: assinaturas e receita ----
         StreamBuilder(
           stream: subService.streamTodas(),
           builder: (context, subSnapshot) {
             if (subSnapshot.hasError) return StreamErrorMessage(erro: subSnapshot.error);
             final assinaturas = subSnapshot.data ?? [];
             final ativas = assinaturas.where((a) => a.status == SubscriptionStatus.ativa).length;
-            final receita = assinaturas
+            final atrasadas = assinaturas.where((a) => a.status == SubscriptionStatus.atrasada).length;
+            final receitaMensal = assinaturas
                 .where((a) => a.status == SubscriptionStatus.ativa)
-                .fold<double>(0, (sum, a) => sum + a.valor);
-            final cancelados = assinaturas.where((a) => a.status == SubscriptionStatus.cancelada).length;
+                .fold<double>(0, (soma, a) => soma + a.valor);
+
+            return GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 10,
+              childAspectRatio: 1.5,
+              children: [
+                StatCard(label: 'Assinaturas ativas', value: '$ativas', icon: Icons.check_circle_outline, accent: true),
+                StatCard(label: 'Em atraso', value: '$atrasadas', icon: Icons.warning_amber_outlined),
+                StatCard(label: 'Receita mensal', value: 'R\$ ${receitaMensal.toStringAsFixed(0)}', icon: Icons.attach_money),
+                StatCard(label: 'Total assinaturas', value: '${assinaturas.length}', icon: Icons.groups_outlined),
+              ],
+            );
+          },
+        ),
+
+        const SizedBox(height: 20),
+
+        // ---- Linha 2: pessoas e conteúdo da plataforma ----
+        StreamBuilder(
+          stream: fsService.streamUsuarios(role: UserRole.aluno),
+          builder: (context, alunosSnapshot) {
+            if (alunosSnapshot.hasError) return StreamErrorMessage(erro: alunosSnapshot.error);
 
             return StreamBuilder(
               stream: fsService.streamUsuarios(role: UserRole.instrutor),
-              builder: (context, instSnapshot) {
-                if (instSnapshot.hasError) return StreamErrorMessage(erro: instSnapshot.error);
-                final instrutores = instSnapshot.data ?? [];
-                return GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 1.5,
-                  children: [
-                    StatCard(label: 'Assinantes', value: '$ativas', icon: Icons.people_outline, accent: true, accentColor: AppColors.adminColor),
-                    StatCard(label: 'Receita mensal', value: 'R\$${(receita / 1000).toStringAsFixed(1)}k', icon: Icons.attach_money),
-                    StatCard(label: 'Instrutores', value: '${instrutores.length}', icon: Icons.menu_book_outlined),
-                    StatCard(label: 'Cancelamentos', value: '$cancelados', icon: Icons.cancel_outlined),
-                  ],
+              builder: (context, instrutoresSnapshot) {
+                if (instrutoresSnapshot.hasError) return StreamErrorMessage(erro: instrutoresSnapshot.error);
+
+                return StreamBuilder(
+                  stream: fsService.streamTreinos(),
+                  builder: (context, treinosSnapshot) {
+                    if (treinosSnapshot.hasError) return StreamErrorMessage(erro: treinosSnapshot.error);
+
+                    return StreamBuilder(
+                      stream: fsService.streamTodoProgresso(),
+                      builder: (context, progressoSnapshot) {
+                        if (progressoSnapshot.hasError) return StreamErrorMessage(erro: progressoSnapshot.error);
+
+                        final alunos = alunosSnapshot.data ?? [];
+                        final instrutores = instrutoresSnapshot.data ?? [];
+                        final treinos = treinosSnapshot.data ?? [];
+                        final progresso = progressoSnapshot.data ?? [];
+
+                        final agora = DateTime.now();
+                        final novosAlunosNoMes =
+                            alunos.where((a) => a.createdAt.year == agora.year && a.createdAt.month == agora.month).length;
+
+                        return GridView.count(
+                          crossAxisCount: 2,
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          mainAxisSpacing: 10,
+                          crossAxisSpacing: 10,
+                          childAspectRatio: 1.5,
+                          children: [
+                            StatCard(label: 'Alunos', value: '${alunos.length}', sub: '+$novosAlunosNoMes este mês', icon: Icons.school_outlined),
+                            StatCard(label: 'Instrutores', value: '${instrutores.length}', icon: Icons.badge_outlined),
+                            StatCard(label: 'Treinos criados', value: '${treinos.length}', icon: Icons.fitness_center),
+                            StatCard(label: 'Treinos concluídos', value: '${progresso.length}', icon: Icons.emoji_events_outlined),
+                          ],
+                        );
+                      },
+                    );
+                  },
                 );
               },
             );
           },
         ),
-        const SizedBox(height: 18),
 
+        const SizedBox(height: 20),
+
+        // ---- Gráfico de MRR (receita recorrente mensal) real ----
         StreamBuilder(
           stream: subService.streamTodas(),
           builder: (context, snapshot) {
