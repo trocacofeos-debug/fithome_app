@@ -91,6 +91,8 @@ class _NotificationCard extends StatelessWidget {
         return Icons.event_outlined;
       case 'assinatura':
         return Icons.payments_outlined;
+      case 'mensagem':
+        return Icons.chat_bubble_outline;
       default:
         return Icons.notifications_outlined;
     }

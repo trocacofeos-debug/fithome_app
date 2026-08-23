@@ -356,6 +356,17 @@ class FirestoreService {
       'texto': texto,
       'criadoEm': agora,
     });
+
+    // 3) Notifica quem RECEBEU a mensagem (nunca quem mandou) — aparece no
+    // sino, tanto do lado do instrutor quanto do aluno.
+    final destinatarioId = souInstrutor ? alunoId : instrutorId;
+    final preview = texto.length > 60 ? '${texto.substring(0, 60)}...' : texto;
+    await criarNotificacao(
+      userId: destinatarioId,
+      titulo: 'Nova mensagem de $autorNome',
+      mensagem: preview,
+      tipo: 'mensagem',
+    );
   }
 
   Stream<List<ChatMessageModel>> streamMensagens(String chatId) {
