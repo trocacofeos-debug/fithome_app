@@ -16,6 +16,7 @@ import '../screens/student/student_panel.dart';
 import '../screens/student/workout_detail_screen.dart';
 import '../screens/student/workout_player_screen.dart';
 import '../screens/account_blocked_screen.dart';
+import '../screens/chat_route_screen.dart';
 
 GoRouter buildRouter(AuthProvider authProvider) {
   return GoRouter(
@@ -70,6 +71,10 @@ GoRouter buildRouter(AuthProvider authProvider) {
       GoRoute(path: '/cadastro', builder: (c, s) => const RegisterScreen()),
       GoRoute(path: '/esqueci-senha', builder: (c, s) => const ForgotPasswordScreen()),
       GoRoute(path: '/bloqueado', builder: (c, s) => const AccountBlockedScreen()),
+      GoRoute(
+        path: '/chat/:chatId',
+        builder: (c, s) => ChatRouteScreen(chatId: s.pathParameters['chatId']!),
+      ),
 
       // ---- ALUNO ----
       // O painel do aluno gerencia suas próprias abas internamente
