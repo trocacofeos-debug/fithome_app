@@ -7,6 +7,7 @@ import '../../../models/workout_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
+import '../instructor_chats_list_screen.dart';
 
 class InstructorHomeTab extends StatelessWidget {
   const InstructorHomeTab({super.key});
@@ -25,6 +26,9 @@ class InstructorHomeTab extends StatelessWidget {
         const SizedBox(height: 2),
         Text(auth.usuario!.nome.toUpperCase(), style: condensed(fontSize: 30)),
         const SizedBox(height: 18),
+
+        _cardMensagens(context, instrutorId, auth.usuario!.nome),
+        const SizedBox(height: 20),
 
         StreamBuilder(
           stream: fsService.streamTreinos(instrutorId: instrutorId),
@@ -71,10 +75,50 @@ class InstructorHomeTab extends StatelessWidget {
     );
   }
 
+  Widget _cardMensagens(BuildContext context, String meuId, String meuNome) {
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => InstructorChatsListScreen(meuId: meuId, meuNome: meuNome)),
+      ),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.chat_bubble_outline, color: AppColors.instrutorColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('MENSAGENS',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+                  Text('Falar com seus alunos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Card "Progresso dos Alunos": para cada um dos seus alunos mais ativos
   /// recentemente, mostra uma barra com a % de dias, dos últimos 7, em que
-  /// ele concluiu pelo menos um treino — um indicador real de consistência,
-  /// calculado a partir do histórico verdadeiro de `workout_progress`.
+  /// ele concluiu pelo menos um treino — calculado a partir do histórico
+  /// verdadeiro de `workout_progress`.
   Widget _cardProgressoAlunos(
     BuildContext context,
     FirestoreService fsService,
@@ -117,8 +161,6 @@ class InstructorHomeTab extends StatelessWidget {
                 final agora = DateTime.now();
                 final seteDiasAtras = agora.subtract(const Duration(days: 7));
 
-                // Para cada aluno: quantos dias distintos, dos últimos 7,
-                // ele teve pelo menos 1 treino concluído com este instrutor.
                 final diasAtivosPorAluno = <String, Set<String>>{};
                 for (final p in progresso) {
                   if (p.concluidoEm.isBefore(seteDiasAtras)) continue;

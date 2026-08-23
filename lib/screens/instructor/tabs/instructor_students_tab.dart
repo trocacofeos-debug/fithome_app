@@ -6,15 +6,13 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/user_model.dart';
 import '../../../models/workout_model.dart';
-import '../../../models/workout_progress_model.dart';
 import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
+import '../../chat_screen.dart';
 
 /// Um "aluno do instrutor" é alguém que já concluiu pelo menos um treino
-/// criado por ele, ou que recebeu um treino individual dele — não existe
-/// (ainda) um cadastro explícito de "matrícula", então essa é a definição
-/// prática de vínculo instrutor-aluno usada aqui.
+/// criado por ele, ou que recebeu um treino individual dele.
 class InstructorStudentsTab extends StatefulWidget {
   const InstructorStudentsTab({super.key});
 
@@ -58,18 +56,14 @@ class _InstructorStudentsTabState extends State<InstructorStudentsTab> {
         StreamBuilder<List<WorkoutModel>>(
           stream: _fsService.streamTreinos(instrutorId: instrutorId),
           builder: (context, treinoSnapshot) {
-            if (treinoSnapshot.hasError) {
-              return _erroCarregar(treinoSnapshot.error);
-            }
+            if (treinoSnapshot.hasError) return StreamErrorMessage(erro: treinoSnapshot.error);
             final treinos = treinoSnapshot.data ?? [];
             final idsPorTreinoIndividual = treinos.where((t) => t.isIndividual).map((t) => t.alunoId!).toSet();
 
-            return StreamBuilder<List<WorkoutProgressModel>>(
+            return StreamBuilder(
               stream: _fsService.streamProgressoDoInstrutor(instrutorId),
               builder: (context, progSnapshot) {
-                if (progSnapshot.hasError) {
-                  return _erroCarregar(progSnapshot.error);
-                }
+                if (progSnapshot.hasError) return StreamErrorMessage(erro: progSnapshot.error);
                 if (!treinoSnapshot.hasData || !progSnapshot.hasData) {
                   return const Padding(
                     padding: EdgeInsets.only(top: 40),
@@ -103,9 +97,7 @@ class _InstructorStudentsTabState extends State<InstructorStudentsTab> {
                 return StreamBuilder<List<UserModel>>(
                   stream: _fsService.streamUsuarios(role: UserRole.aluno),
                   builder: (context, userSnapshot) {
-                    if (userSnapshot.hasError) {
-                      return _erroCarregar(userSnapshot.error);
-                    }
+                    if (userSnapshot.hasError) return StreamErrorMessage(erro: userSnapshot.error);
                     if (!userSnapshot.hasData) {
                       return const Padding(
                         padding: EdgeInsets.only(top: 40),
@@ -135,7 +127,14 @@ class _InstructorStudentsTabState extends State<InstructorStudentsTab> {
                           treinosConcluidos: contagemPorAluno[a.id] ?? 0,
                           temTreinoIndividual: idsPorTreinoIndividual.contains(a.id),
                           ultimaAtividade: ultimaAtividadePorAluno[a.id],
-                          onTap: () => _abrirDetalheAluno(context, a, contagemPorAluno[a.id] ?? 0, ultimaAtividadePorAluno[a.id]),
+                          onTap: () => _abrirDetalheAluno(
+                            context,
+                            a,
+                            contagemPorAluno[a.id] ?? 0,
+                            ultimaAtividadePorAluno[a.id],
+                            instrutorId,
+                            auth.usuario!.nome,
+                          ),
                         );
                       }).toList(),
                     );
@@ -149,9 +148,14 @@ class _InstructorStudentsTabState extends State<InstructorStudentsTab> {
     );
   }
 
-  Widget _erroCarregar(Object? erro) => StreamErrorMessage(erro: erro, titulo: 'Não foi possível carregar os alunos');
-
-  void _abrirDetalheAluno(BuildContext context, UserModel aluno, int treinosConcluidos, DateTime? ultimaAtividade) {
+  void _abrirDetalheAluno(
+    BuildContext context,
+    UserModel aluno,
+    int treinosConcluidos,
+    DateTime? ultimaAtividade,
+    String instrutorId,
+    String instrutorNome,
+  ) {
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Padding(
@@ -194,13 +198,43 @@ class _InstructorStudentsTabState extends State<InstructorStudentsTab> {
               ],
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(ctx);
-                context.push('/instrutor/novo-treino?alunoId=${aluno.id}&alunoNome=${Uri.encodeComponent(aluno.nome)}');
-              },
-              icon: const Icon(Icons.fitness_center),
-              label: const Text('Criar treino individual'),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(
+                            instrutorId: instrutorId,
+                            instrutorNome: instrutorNome,
+                            alunoId: aluno.id,
+                            alunoNome: aluno.nome,
+                            meuId: instrutorId,
+                            meuNome: instrutorNome,
+                            souInstrutor: true,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Conversar'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      context.push('/instrutor/novo-treino?alunoId=${aluno.id}&alunoNome=${Uri.encodeComponent(aluno.nome)}');
+                    },
+                    icon: const Icon(Icons.fitness_center),
+                    label: const Text('Novo treino'),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -226,6 +260,7 @@ class _AlunoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nome = aluno.nome;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -240,7 +275,7 @@ class _AlunoCard extends StatelessWidget {
         child: Row(
           children: [
             InitialsAvatar(
-              initials: aluno.nome.isNotEmpty ? aluno.nome.substring(0, 1).toUpperCase() : '?',
+              initials: nome.isNotEmpty ? nome.substring(0, 1).toUpperCase() : '?',
               color: AppColors.instrutorColor,
             ),
             const SizedBox(width: 12),
@@ -251,9 +286,7 @@ class _AlunoCard extends StatelessWidget {
                   Row(
                     children: [
                       Flexible(
-                        child: Text(aluno.nome,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        child: Text(nome, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                       ),
                       if (temTreinoIndividual) ...[
                         const SizedBox(width: 6),

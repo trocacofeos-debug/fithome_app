@@ -75,6 +75,8 @@ class FirestoreCollections {
   static const workoutProgress = 'workout_progress';
   static const appointments = 'appointments';
   static const notifications = 'notifications';
+  static const chats = 'chats';
+  static const mensagens = 'mensagens'; // subcoleção de chats/{id}/mensagens
 }
 
 class AppConstants {

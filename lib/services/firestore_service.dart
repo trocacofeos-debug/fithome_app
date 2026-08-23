@@ -6,6 +6,7 @@ import '../models/subscription_model.dart';
 import '../models/workout_progress_model.dart';
 import '../models/appointment_model.dart';
 import '../models/notification_model.dart';
+import '../models/chat_model.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -281,5 +282,121 @@ class FirestoreService {
       batch.update(doc.reference, {'lida': true});
     }
     await batch.commit();
+  }
+
+  // ---------- CHAT ----------
+
+  /// ID determinístico do chat entre uma dupla instrutor+aluno — nunca
+  /// existe mais de uma conversa entre as mesmas duas pessoas.
+  String idDoChat(String instrutorId, String alunoId) => '${instrutorId}_$alunoId';
+
+  /// Garante que o documento do chat existe, com os campos de identidade
+  /// preenchidos (instrutorId/alunoId/nomes) — sem "última mensagem"
+  /// ainda, se for a primeira vez. Precisa ser chamado ANTES de tentar
+  /// ouvir as mensagens de uma conversa: a regra de segurança da
+  /// subcoleção "mensagens" confere o dono checando esse documento pai, e
+  /// se ele não existir, a leitura é negada.
+  Future<void> garantirChatExiste({
+    required String instrutorId,
+    required String instrutorNome,
+    required String alunoId,
+    required String alunoNome,
+  }) async {
+    final chatId = idDoChat(instrutorId, alunoId);
+    await _db.collection(FirestoreCollections.chats).doc(chatId).set({
+      'instrutorId': instrutorId,
+      'instrutorNome': instrutorNome,
+      'alunoId': alunoId,
+      'alunoNome': alunoNome,
+    }, SetOptions(merge: true));
+  }
+
+  /// Envia uma mensagem e atualiza os metadados do chat (última mensagem,
+  /// contador de não lidas de quem NÃO mandou).
+  ///
+  /// Importante: NÃO usa transação/`.get()` prévio no documento do chat —
+  /// numa conversa nova, esse documento ainda não existe, e uma regra de
+  /// segurança que tenta ler `resource.data` de um documento inexistente
+  /// trava com "permission denied" antes mesmo de criar o documento. Em
+  /// vez disso, usamos `set(merge: true)` (cria se não existir, atualiza
+  /// se já existir) e `FieldValue.increment` (não precisa saber o valor
+  /// atual do contador).
+  Future<void> enviarMensagem({
+    required String instrutorId,
+    required String instrutorNome,
+    required String alunoId,
+    required String alunoNome,
+    required String autorId,
+    required String autorNome,
+    required String texto,
+  }) async {
+    final chatId = idDoChat(instrutorId, alunoId);
+    final chatRef = _db.collection(FirestoreCollections.chats).doc(chatId);
+    final souInstrutor = autorId == instrutorId;
+    final agora = Timestamp.now();
+
+    // 1) Cria ou atualiza os metadados do chat.
+    await chatRef.set({
+      'instrutorId': instrutorId,
+      'instrutorNome': instrutorNome,
+      'alunoId': alunoId,
+      'alunoNome': alunoNome,
+      'ultimaMensagem': texto,
+      'ultimaMensagemEm': agora,
+      'ultimaMensagemAutorId': autorId,
+      if (souInstrutor) 'naoLidasAluno': FieldValue.increment(1) else 'naoLidasInstrutor': FieldValue.increment(1),
+    }, SetOptions(merge: true));
+
+    // 2) Só depois cria a mensagem em si — nessa hora o documento do chat
+    // já existe de verdade, então a regra de segurança da subcoleção
+    // "mensagens" (que confere o dono do chat) encontra ele normalmente.
+    await chatRef.collection(FirestoreCollections.mensagens).add({
+      'autorId': autorId,
+      'autorNome': autorNome,
+      'texto': texto,
+      'criadoEm': agora,
+    });
+  }
+
+  Stream<List<ChatMessageModel>> streamMensagens(String chatId) {
+    return _db
+        .collection(FirestoreCollections.chats)
+        .doc(chatId)
+        .collection(FirestoreCollections.mensagens)
+        .orderBy('criadoEm')
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => ChatMessageModel.fromMap(d.id, d.data())).toList());
+  }
+
+  Stream<ChatModel?> streamChat(String chatId) {
+    return _db.collection(FirestoreCollections.chats).doc(chatId).snapshots().map(
+          (doc) => doc.exists ? ChatModel.fromMap(doc.id, doc.data()!) : null,
+        );
+  }
+
+  /// Todas as conversas de um instrutor, mais recentes primeiro.
+  Stream<List<ChatModel>> streamChatsDoInstrutor(String instrutorId) {
+    return _db
+        .collection(FirestoreCollections.chats)
+        .where('instrutorId', isEqualTo: instrutorId)
+        .orderBy('ultimaMensagemEm', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => ChatModel.fromMap(d.id, d.data())).toList());
+  }
+
+  /// Tenta marcar como lido; se o chat ainda não existir (conversa sem
+  /// nenhuma mensagem ainda), o `update()` falha e a gente ignora — não
+  /// tem nada pra marcar como lido mesmo. Evitamos de propósito checar a
+  /// existência com um `.get()` antes: isso bateria na mesma regra de
+  /// segurança que só libera leitura pra quem já é dono do chat, e um chat
+  /// que ainda não existe não tem "dono" nenhum pra regra reconhecer.
+  Future<void> marcarChatComoLido(String chatId, {required bool souInstrutor}) async {
+    try {
+      await _db.collection(FirestoreCollections.chats).doc(chatId).update({
+        souInstrutor ? 'naoLidasInstrutor' : 'naoLidasAluno': 0,
+      });
+    } catch (_) {
+      // Chat ainda não existe — nada a fazer.
+    }
   }
 }

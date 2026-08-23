@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/workout_model.dart';
@@ -13,6 +12,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
 import '../student_schedule_screen.dart';
+import '../../chat_screen.dart';
 
 class StudentHomeTab extends StatelessWidget {
   const StudentHomeTab({super.key});
@@ -51,7 +51,6 @@ class StudentHomeTab extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
               children: [
-                // Saudação
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -87,13 +86,9 @@ class StudentHomeTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Treino em destaque — prioriza um treino individual (feito
-                // especificamente para este aluno pelo instrutor), senão mostra o
-                // primeiro treino geral disponível.
                 if (treinos.isNotEmpty) _cardDestaque(treinos),
                 if (treinos.isNotEmpty) const SizedBox(height: 20),
 
-                // Stats reais, calculados a partir do histórico de treinos concluídos.
                 Row(
                   children: [
                     Expanded(child: StatCard(label: 'Treinos', value: '${historico.length}', icon: Icons.fitness_center)),
@@ -105,71 +100,12 @@ class StudentHomeTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 20),
 
-                // Card do instrutor: prioriza quem te atribuiu um treino
-                // individual; senão, o instrutor cujos treinos você mais
-                // concluiu; só cai no "primeiro instrutor do sistema" se
-                // você ainda não tem nenhuma atividade registrada.
                 _cardInstrutor(context, fsService, treinos, historico),
                 const SizedBox(height: 20),
                 _cardProximoCompromisso(context, fsService, alunoId),
               ],
             );
           },
-        );
-      },
-    );
-  }
-
-  Widget _cardProximoCompromisso(BuildContext context, FirestoreService fsService, String alunoId) {
-    return StreamBuilder<List<AppointmentModel>>(
-      stream: fsService.streamAgendaDoAluno(alunoId),
-      builder: (context, snapshot) {
-        final agora = DateTime.now();
-        final proximos = (snapshot.data ?? [])
-            .where((a) => a.dataHora.isAfter(agora) && a.status == AppointmentStatus.agendado)
-            .toList()
-          ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
-
-        return InkWell(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentScheduleScreen())),
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.card,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.event_outlined, color: AppColors.primary, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('MINHA AGENDA',
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
-                      Text(
-                        proximos.isEmpty
-                            ? 'Nenhum compromisso agendado'
-                            : '${proximos.first.tipo} · ${DateFormat('dd/MM').format(proximos.first.dataHora)} às ${DateFormat('HH:mm').format(proximos.first.dataHora)}',
-                        style: condensed(fontSize: 15),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
-              ],
-            ),
-          ),
         );
       },
     );
@@ -182,9 +118,6 @@ class StudentHomeTab extends StatelessWidget {
     return 'BOA NOITE 👋';
   }
 
-  /// Sequência de dias consecutivos com pelo menos 1 treino concluído,
-  /// contando a partir de hoje (ou de ontem, se ainda não treinou hoje —
-  /// assim a sequência não "quebra" só porque o dia não acabou).
   int _calcularSequencia(List<WorkoutProgressModel> historico) {
     if (historico.isEmpty) return 0;
     final diasComTreino = historico.map((p) => DateTime(p.concluidoEm.year, p.concluidoEm.month, p.concluidoEm.day)).toSet();
@@ -283,14 +216,11 @@ class StudentHomeTab extends StatelessWidget {
     List<WorkoutModel> treinos,
     List<WorkoutProgressModel> historico,
   ) {
-    // 1) instrutor de um treino individual atribuído a este aluno (já
-    // carrega o nome, não precisa buscar usuário à parte)
     final individuais = treinos.where((t) => t.isIndividual).toList();
     if (individuais.isNotEmpty) {
-      return _instrutorCard(individuais.first.instrutorId, individuais.first.instrutorNome);
+      return _instrutorCard(context, individuais.first.instrutorId, individuais.first.instrutorNome);
     }
 
-    // 2) instrutor cujos treinos o aluno mais concluiu
     if (historico.isNotEmpty) {
       final contagem = <String, int>{};
       for (final p in historico) {
@@ -303,25 +233,24 @@ class StudentHomeTab extends StatelessWidget {
           final instrutores = snapshot.data ?? [];
           final match = instrutores.where((i) => i.id == instrutorIdMaisAtivo);
           if (match.isEmpty) return const SizedBox.shrink();
-          return _instrutorCard(match.first.id, match.first.nome);
+          return _instrutorCard(context, match.first.id, match.first.nome);
         },
       );
     }
 
-    // 3) aluno novo, sem nenhuma atividade ainda: mostra o primeiro
-    // instrutor cadastrado, como sugestão inicial.
     return StreamBuilder(
       stream: fsService.streamUsuarios(role: UserRole.instrutor),
       builder: (context, snapshot) {
         final instrutores = snapshot.data ?? [];
         if (instrutores.isEmpty) return const SizedBox.shrink();
-        return _instrutorCard(instrutores.first.id, instrutores.first.nome);
+        return _instrutorCard(context, instrutores.first.id, instrutores.first.nome);
       },
     );
   }
 
-  Widget _instrutorCard(String instrutorId, String nomeInstrutor) {
+  Widget _instrutorCard(BuildContext context, String instrutorId, String nomeInstrutor) {
     final iniciais = nomeInstrutor.isNotEmpty ? nomeInstrutor.substring(0, 1).toUpperCase() : '?';
+    final auth = context.read<AuthProvider>();
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -343,8 +272,80 @@ class StudentHomeTab extends StatelessWidget {
               ],
             ),
           ),
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline, color: AppColors.primary),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChatScreen(
+                  instrutorId: instrutorId,
+                  instrutorNome: nomeInstrutor,
+                  alunoId: auth.usuario!.id,
+                  alunoNome: auth.usuario!.nome,
+                  meuId: auth.usuario!.id,
+                  meuNome: auth.usuario!.nome,
+                  souInstrutor: false,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _cardProximoCompromisso(BuildContext context, FirestoreService fsService, String alunoId) {
+    return StreamBuilder<List<AppointmentModel>>(
+      stream: fsService.streamAgendaDoAluno(alunoId),
+      builder: (context, snapshot) {
+        final agora = DateTime.now();
+        final proximos = (snapshot.data ?? [])
+            .where((a) => a.dataHora.isAfter(agora) && a.status == AppointmentStatus.agendado)
+            .toList()
+          ..sort((a, b) => a.dataHora.compareTo(b.dataHora));
+
+        return InkWell(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentScheduleScreen())),
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.event_outlined, color: AppColors.primary, size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('MINHA AGENDA',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+                      Text(
+                        proximos.isEmpty
+                            ? 'Nenhum compromisso agendado'
+                            : '${proximos.first.tipo} · ${proximos.first.dataHora.day}/${proximos.first.dataHora.month}',
+                        style: condensed(fontSize: 15),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
