@@ -1,4 +1,4 @@
-const { db } = require('../api-lib/firebaseAdmin');
+const { db } = require('./_lib/firebaseAdmin');
 
 const ASAAS_BASE_URL = 'https://sandbox.asaas.com/api/v3';
 

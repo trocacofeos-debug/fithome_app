@@ -1,4 +1,4 @@
-const { db } = require('../api-lib/firebaseAdmin');
+const { db } = require('./_lib/firebaseAdmin');
 
 // Configurado em vercel.json (seção "crons") para rodar 1x por dia.
 // A Vercel manda automaticamente o header Authorization com o CRON_SECRET
