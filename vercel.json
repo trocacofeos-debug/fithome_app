@@ -4,5 +4,8 @@
   "installCommand": "npm install",
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "crons": [
+    { "path": "/api/cron-check-atrasadas", "schedule": "0 9 * * *" }
   ]
 }
