@@ -83,10 +83,15 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> registrar(String nome, String email, String senha) async {
+  Future<bool> registrar(String nome, String email, String senha, {String? codigoIndicacao}) async {
     try {
       erro = null;
-      usuario = await _authService.registrar(nome: nome, email: email, senha: senha);
+      usuario = await _authService.registrar(
+        nome: nome,
+        email: email,
+        senha: senha,
+        codigoIndicacao: codigoIndicacao,
+      );
       status = AuthStatus.autenticado;
       notifyListeners();
       return true;

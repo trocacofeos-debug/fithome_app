@@ -68,7 +68,10 @@ GoRouter buildRouter(AuthProvider authProvider) {
     routes: [
       GoRoute(path: '/', builder: (c, s) => const SplashScreen()),
       GoRoute(path: '/login', builder: (c, s) => const LoginScreen()),
-      GoRoute(path: '/cadastro', builder: (c, s) => const RegisterScreen()),
+      GoRoute(
+        path: '/cadastro',
+        builder: (c, s) => RegisterScreen(codigoIndicacaoInicial: s.uri.queryParameters['ref']),
+      ),
       GoRoute(path: '/esqueci-senha', builder: (c, s) => const ForgotPasswordScreen()),
       GoRoute(path: '/bloqueado', builder: (c, s) => const AccountBlockedScreen()),
       GoRoute(

@@ -15,6 +15,12 @@ class UserModel {
   /// cobranças — sem isso, o checkout de assinatura não funciona.
   final String? cpf;
 
+  /// uid do instrutor que indicou este usuário no cadastro (sistema de
+  /// indicação/comissão). Nulo se não veio de nenhuma indicação. É
+  /// definido só na criação da conta e travado pelas regras do Firestore
+  /// depois disso — não faz parte do `copyWith`.
+  final String? indicadoPor;
+
   UserModel({
     required this.id,
     required this.nome,
@@ -25,6 +31,7 @@ class UserModel {
     required this.createdAt,
     this.ativo = true,
     this.cpf,
+    this.indicadoPor,
   });
 
   factory UserModel.fromMap(String id, Map<String, dynamic> map) {
@@ -38,6 +45,7 @@ class UserModel {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       ativo: map['ativo'] ?? true,
       cpf: map['cpf'],
+      indicadoPor: map['indicadoPor'],
     );
   }
 
@@ -51,6 +59,7 @@ class UserModel {
       'createdAt': Timestamp.fromDate(createdAt),
       'ativo': ativo,
       'cpf': cpf,
+      'indicadoPor': indicadoPor,
     };
   }
 

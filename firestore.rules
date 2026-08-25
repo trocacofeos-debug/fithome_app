@@ -1,24 +1,18 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function logado() {
       return request.auth != null;
     }
-
     function role() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
     }
-
     function isAdmin() {
       return logado() && role() == 'admin';
     }
-
     function isInstrutor() {
       return logado() && role() == 'instrutor';
     }
-
     function isDono(uid) {
       return logado() && request.auth.uid == uid;
     }
@@ -26,9 +20,15 @@ service cloud.firestore {
     // ---------- USERS ----------
     match /users/{userId} {
       allow read: if logado();
-      // Usuário pode editar seu próprio perfil, mas NUNCA o próprio campo "role".
-      allow update: if isDono(userId) &&
-                       request.resource.data.role == resource.data.role
+      // Usuário pode editar o próprio perfil, mas nunca os campos "role",
+      // "asaasCustomerId" (cadastro no gateway de pagamento) e
+      // "indicadoPor" (quem o indicou no sistema de indicação/comissão —
+      // travado pra evitar fraude: alguém se auto-vinculando a um
+      // instrutor depois de já ter se cadastrado).
+      allow update: if (isDono(userId) &&
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.get('asaasCustomerId', null) == resource.data.get('asaasCustomerId', null) &&
+                       request.resource.data.get('indicadoPor', null) == resource.data.get('indicadoPor', null))
                     || isAdmin();
       allow create: if isDono(userId);
       allow delete: if isAdmin();
@@ -54,11 +54,65 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ---------- REFERRAL COMMISSIONS (indicação/comissão do instrutor) ----------
+    // Gravado só pelo backend (webhook do Asaas, via Admin SDK — ignora
+    // estas regras). Aqui só controlamos leitura: cada instrutor só vê as
+    // próprias comissões.
+    match /referral_commissions/{commissionId} {
+      allow read: if isAdmin() || (logado() && resource.data.instrutorId == request.auth.uid);
+      allow write: if isAdmin();
+    }
+
     // ---------- WORKOUT PROGRESS ----------
     match /workout_progress/{progressId} {
-      allow read, write: if isAdmin() ||
-                             (logado() && resource != null && resource.data.alunoId == request.auth.uid);
+      allow read: if isAdmin() ||
+                     (logado() && resource.data.alunoId == request.auth.uid) ||
+                     (logado() && resource.data.instrutorId == request.auth.uid);
       allow create: if logado() && request.resource.data.alunoId == request.auth.uid;
+      allow update, delete: if isAdmin() || (logado() && resource.data.alunoId == request.auth.uid);
+    }
+
+    // ---------- AGENDA (APPOINTMENTS) ----------
+    match /appointments/{appointmentId} {
+      allow read: if isAdmin() ||
+                     (logado() && resource.data.instrutorId == request.auth.uid) ||
+                     (logado() && resource.data.alunoId == request.auth.uid);
+      allow create: if isInstrutor() && request.resource.data.instrutorId == request.auth.uid;
+      allow update, delete: if isAdmin() ||
+                                (isInstrutor() && resource.data.instrutorId == request.auth.uid);
+    }
+
+    // ---------- NOTIFICAÇÕES ----------
+    match /notifications/{notificationId} {
+      allow read, update: if isAdmin() || (logado() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin() || isInstrutor() ||
+                       (logado() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (logado() && resource.data.userId == request.auth.uid);
+    }
+
+    // ---------- CHAT ----------
+    // O ID do chat é sempre "{instrutorId}_{alunoId}".
+    match /chats/{chatId} {
+      allow read, update: if isAdmin() ||
+                              (logado() && resource.data.instrutorId == request.auth.uid) ||
+                              (logado() && resource.data.alunoId == request.auth.uid);
+      allow create: if isAdmin() ||
+                       (logado() &&
+                        (request.resource.data.instrutorId == request.auth.uid ||
+                         request.resource.data.alunoId == request.auth.uid));
+
+      match /mensagens/{mensagemId} {
+        allow read: if isAdmin() ||
+                       (logado() &&
+                        exists(/databases/$(database)/documents/chats/$(chatId)) &&
+                        (get(/databases/$(database)/documents/chats/$(chatId)).data.instrutorId == request.auth.uid ||
+                         get(/databases/$(database)/documents/chats/$(chatId)).data.alunoId == request.auth.uid));
+        allow create: if logado() &&
+                         request.resource.data.autorId == request.auth.uid &&
+                         exists(/databases/$(database)/documents/chats/$(chatId)) &&
+                         (get(/databases/$(database)/documents/chats/$(chatId)).data.instrutorId == request.auth.uid ||
+                          get(/databases/$(database)/documents/chats/$(chatId)).data.alunoId == request.auth.uid);
+      }
     }
   }
 }

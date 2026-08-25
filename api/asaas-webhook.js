@@ -2,11 +2,56 @@ const { db } = require('./_lib/firebaseAdmin');
 
 const ASAAS_BASE_URL = 'https://sandbox.asaas.com/api/v3';
 
+// Sistema de indicação: plano cuja mensalidade paga comissão ao instrutor
+// que indicou o aluno, e o valor dessa comissão.
+const VALOR_PLANO_COMISSIONAVEL = 29.99;
+const VALOR_COMISSAO_INDICACAO = 10;
+
 async function asaasFetch(path) {
   const res = await fetch(`${ASAAS_BASE_URL}${path}`, {
     headers: { 'access_token': process.env.ASAAS_API_KEY },
   });
   return res.json();
+}
+
+// Credita a comissão de indicação ao instrutor, se o aluno tiver sido
+// indicado por alguém e o plano pago for o comissionável. Um documento por
+// (instrutor, aluno, mês) em `referral_commissions`, com ID determinístico
+// — `.create()` falha com ALREADY_EXISTS se já existir, o que garante que
+// reenvios do mesmo evento pelo Asaas nunca dupliquem a comissão.
+async function creditarComissaoIndicacao(subData, subscriptionRef) {
+  if (Math.abs(subData.valor - VALOR_PLANO_COMISSIONAVEL) > 0.01) return;
+
+  const alunoDoc = await db.collection('users').doc(subData.alunoId).get();
+  if (!alunoDoc.exists) return;
+  const indicadoPor = alunoDoc.data().indicadoPor;
+  if (!indicadoPor || indicadoPor === subData.alunoId) return;
+
+  const agora = new Date();
+  const periodo = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+  const commissionId = `${indicadoPor}_${subData.alunoId}_${periodo}`;
+
+  try {
+    await db.collection('referral_commissions').doc(commissionId).create({
+      instrutorId: indicadoPor,
+      alunoId: subData.alunoId,
+      alunoNome: subData.alunoNome,
+      subscriptionId: subscriptionRef.id,
+      valor: VALOR_COMISSAO_INDICACAO,
+      periodo,
+      criadoEm: agora,
+    });
+  } catch (err) {
+    if (err.code === 6 || /already exists/i.test(err.message || '')) return; // já creditado neste período
+    throw err;
+  }
+
+  await criarNotificacao(
+    indicadoPor,
+    'Nova comissão de indicação',
+    `Você ganhou R$${VALOR_COMISSAO_INDICACAO.toFixed(2)} pela mensalidade de ${subData.alunoNome} este mês.`,
+    'comissao',
+  );
 }
 
 async function criarNotificacao(userId, titulo, mensagem, tipo) {
@@ -68,6 +113,7 @@ module.exports = async (req, res) => {
           `Sua assinatura do plano ${subData.planoNome} está ativa.`,
           'assinatura',
         );
+        await creditarComissaoIndicacao(subData, ref);
         break;
       }
 

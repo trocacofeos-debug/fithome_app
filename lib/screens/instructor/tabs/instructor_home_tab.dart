@@ -8,6 +8,7 @@ import '../../../providers/auth_provider.dart';
 import '../../../services/firestore_service.dart';
 import '../../../widgets/shared_widgets.dart';
 import '../instructor_chats_list_screen.dart';
+import '../instructor_referrals_screen.dart';
 
 class InstructorHomeTab extends StatelessWidget {
   const InstructorHomeTab({super.key});
@@ -28,6 +29,8 @@ class InstructorHomeTab extends StatelessWidget {
         const SizedBox(height: 18),
 
         _cardMensagens(context, instrutorId, auth.usuario!.nome),
+        const SizedBox(height: 12),
+        _cardIndicacoes(context, instrutorId, auth.usuario!.nome),
         const SizedBox(height: 20),
 
         StreamBuilder(
@@ -105,6 +108,46 @@ class InstructorHomeTab extends StatelessWidget {
                   Text('MENSAGENS',
                       style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
                   Text('Falar com seus alunos', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.mutedForeground),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardIndicacoes(BuildContext context, String meuId, String meuNome) {
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => InstructorReferralsScreen(instrutorId: meuId, instrutorNome: meuNome)),
+      ),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: AppColors.secondary, borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.card_giftcard_outlined, color: AppColors.instrutorColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('INDICAÇÕES',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+                  Text('Ganhe R\$10/mês por aluno indicado', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                 ],
               ),
             ),

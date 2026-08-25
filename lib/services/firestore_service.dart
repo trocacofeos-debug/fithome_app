@@ -39,6 +39,17 @@ class FirestoreService {
     return _db.collection(FirestoreCollections.users).doc(uid).update({'ativo': ativo});
   }
 
+  /// Alunos cujo cadastro foi feito com o código de indicação deste
+  /// instrutor (campo `indicadoPor`, gravado uma única vez na criação da
+  /// conta) — usado na tela de Indicações/Comissões do instrutor.
+  Stream<List<UserModel>> streamIndicadosPeloInstrutor(String instrutorId) {
+    return _db
+        .collection(FirestoreCollections.users)
+        .where('indicadoPor', isEqualTo: instrutorId)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => UserModel.fromMap(d.id, d.data())).toList());
+  }
+
   /// Atualiza o próprio perfil (usado pela tela "Meu Perfil" — qualquer
   /// usuário pode editar os próprios dados básicos, mas nunca o "role").
   Future<void> atualizarPerfilProprio(

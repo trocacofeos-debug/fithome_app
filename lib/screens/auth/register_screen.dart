@@ -4,7 +4,11 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/auth_provider.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  /// Código de indicação vindo do link do instrutor (`/cadastro?ref=...`),
+  /// se houver. Pré-preenche o campo de código, mas continua editável.
+  final String? codigoIndicacaoInicial;
+
+  const RegisterScreen({super.key, this.codigoIndicacaoInicial});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -15,6 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nomeCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _senhaCtrl = TextEditingController();
+  late final _codigoIndicacaoCtrl = TextEditingController(text: widget.codigoIndicacaoInicial ?? '');
   bool _carregando = false;
 
   Future<void> _cadastrar() async {
@@ -25,6 +30,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _nomeCtrl.text.trim(),
       _emailCtrl.text.trim(),
       _senhaCtrl.text.trim(),
+      codigoIndicacao: _codigoIndicacaoCtrl.text.trim().isEmpty ? null : _codigoIndicacaoCtrl.text.trim(),
     );
     setState(() => _carregando = false);
     if (!ok && mounted) {
@@ -80,6 +86,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     prefixIcon: Icon(Icons.lock_outline, color: AppColors.mutedForeground),
                   ),
                   validator: (v) => (v == null || v.length < 6) ? 'Mínimo 6 caracteres' : null,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _codigoIndicacaoCtrl,
+                  style: const TextStyle(color: AppColors.foreground),
+                  decoration: const InputDecoration(
+                    labelText: 'Código de indicação (opcional)',
+                    labelStyle: TextStyle(color: AppColors.mutedForeground),
+                    prefixIcon: Icon(Icons.card_giftcard_outlined, color: AppColors.mutedForeground),
+                  ),
                 ),
                 const SizedBox(height: 22),
                 ElevatedButton(

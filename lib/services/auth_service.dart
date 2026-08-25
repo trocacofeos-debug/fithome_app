@@ -20,10 +20,16 @@ class AuthService {
   /// Cria a conta no Auth e o documento do usuário no Firestore.
   /// Por padrão todo cadastro público entra como 'aluno'.
   /// Instrutor e Admin são promovidos manualmente pelo painel Admin.
+  ///
+  /// [codigoIndicacao], se informado, é o uid de um instrutor (sistema de
+  /// indicação/comissão). Só é gravado como `indicadoPor` se o código
+  /// corresponder de fato a um usuário com papel 'instrutor' — um código
+  /// inválido/vazio nunca bloqueia o cadastro, só é ignorado.
   Future<UserModel> registrar({
     required String nome,
     required String email,
     required String senha,
+    String? codigoIndicacao,
   }) async {
     final cred = await _auth.createUserWithEmailAndPassword(
       email: email,
@@ -31,18 +37,29 @@ class AuthService {
     );
 
     final uid = cred.user!.uid;
+    final indicadoPor = await _resolverIndicadoPor(codigoIndicacao);
     final userModel = UserModel(
       id: uid,
       nome: nome,
       email: email,
       role: UserRole.aluno,
       createdAt: DateTime.now(),
+      indicadoPor: indicadoPor,
     );
 
     await _db.collection(FirestoreCollections.users).doc(uid).set(userModel.toMap());
     await cred.user!.updateDisplayName(nome);
 
     return userModel;
+  }
+
+  Future<String?> _resolverIndicadoPor(String? codigoIndicacao) async {
+    final codigo = codigoIndicacao?.trim();
+    if (codigo == null || codigo.isEmpty) return null;
+    final doc = await _db.collection(FirestoreCollections.users).doc(codigo).get();
+    if (!doc.exists) return null;
+    final role = UserRoleX.fromString(doc.data()?['role'] ?? 'aluno');
+    return role == UserRole.instrutor ? codigo : null;
   }
 
   Future<UserModel> login({required String email, required String senha}) async {

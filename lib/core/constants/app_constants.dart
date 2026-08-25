@@ -77,6 +77,7 @@ class FirestoreCollections {
   static const notifications = 'notifications';
   static const chats = 'chats';
   static const mensagens = 'mensagens'; // subcoleção de chats/{id}/mensagens
+  static const referralCommissions = 'referral_commissions';
 }
 
 class AppConstants {
