@@ -31,8 +31,149 @@
 
   <title>fithome_app</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    #pwa-install-banner {
+      display: none;
+      position: fixed;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 999999;
+      background: #171717;
+      border: 1px solid #2A2A2A;
+      border-radius: 16px;
+      padding: 14px 14px 14px 16px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #FFFFFF;
+      align-items: center;
+      gap: 12px;
+    }
+    #pwa-install-banner.show { display: flex; }
+    #pwa-install-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      flex: none;
+    }
+    #pwa-install-text { flex: 1; min-width: 0; }
+    #pwa-install-title { font-weight: 700; font-size: 13px; margin: 0 0 2px; }
+    #pwa-install-subtitle { font-weight: 400; font-size: 11.5px; margin: 0; color: #A1A1A1; line-height: 1.4; }
+    #pwa-install-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+    #pwa-install-btn {
+      background: #FF4500;
+      color: #FFFFFF;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-weight: 700;
+      font-size: 12.5px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    #pwa-install-close {
+      background: transparent;
+      border: none;
+      color: #A1A1A1;
+      font-size: 20px;
+      line-height: 1;
+      padding: 6px;
+      cursor: pointer;
+    }
+    @media (min-width: 600px) {
+      #pwa-install-banner { left: auto; width: 360px; }
+    }
+  </style>
 </head>
 <body>
+  <!-- Convite para instalar o app na tela inicial (PWA). Vive fora da
+       árvore do Flutter de propósito: precisa capturar o evento
+       "beforeinstallprompt" o quanto antes (ele pode disparar antes do
+       Flutter terminar de carregar), e no iOS Safari não existe API de
+       instalação nenhuma — só dá pra orientar o usuário manualmente. -->
+  <div id="pwa-install-banner">
+    <img id="pwa-install-icon" src="icons/Icon-192.png" alt="">
+    <div id="pwa-install-text">
+      <p id="pwa-install-title">Instalar FitHome Pro</p>
+      <p id="pwa-install-subtitle"></p>
+    </div>
+    <div id="pwa-install-actions">
+      <button id="pwa-install-btn" type="button">Instalar</button>
+      <button id="pwa-install-close" type="button" aria-label="Fechar">&times;</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var DISMISS_KEY = 'pwaInstallDismissedAt';
+      var INSTALLED_KEY = 'pwaInstalled';
+      var COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000; // não insiste antes de 14 dias
+
+      function jaInstalado() {
+        if (localStorage.getItem(INSTALLED_KEY) === '1') return true;
+        if (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) return true;
+        if (window.navigator.standalone === true) return true; // Safari iOS
+        return false;
+      }
+
+      function dentroDoCooldown() {
+        var ultimaVez = localStorage.getItem(DISMISS_KEY);
+        if (!ultimaVez) return false;
+        return (Date.now() - Number(ultimaVez)) < COOLDOWN_MS;
+      }
+
+      var ua = window.navigator.userAgent || '';
+      var isIOS = /iPhone|iPad|iPod/i.test(ua) && !window.MSStream;
+      var isAndroid = /Android/i.test(ua);
+      var isMobile = isIOS || isAndroid;
+
+      if (!isMobile || jaInstalado() || dentroDoCooldown()) return;
+
+      var banner = document.getElementById('pwa-install-banner');
+      var subtitle = document.getElementById('pwa-install-subtitle');
+      var installBtn = document.getElementById('pwa-install-btn');
+      var closeBtn = document.getElementById('pwa-install-close');
+      var deferredPrompt = null;
+
+      function esconder() {
+        banner.classList.remove('show');
+      }
+
+      closeBtn.addEventListener('click', function () {
+        localStorage.setItem(DISMISS_KEY, String(Date.now()));
+        esconder();
+      });
+
+      window.addEventListener('appinstalled', function () {
+        localStorage.setItem(INSTALLED_KEY, '1');
+        esconder();
+      });
+
+      if (isIOS) {
+        // Safari no iOS não tem "beforeinstallprompt" — só dá pra orientar.
+        subtitle.textContent = 'Toque em Compartilhar e depois em "Adicionar à Tela de Início".';
+        installBtn.style.display = 'none';
+        setTimeout(function () { banner.classList.add('show'); }, 1500);
+      } else if (isAndroid) {
+        subtitle.textContent = 'Acesse mais rápido, direto da tela inicial do seu celular.';
+        window.addEventListener('beforeinstallprompt', function (event) {
+          event.preventDefault();
+          deferredPrompt = event;
+          banner.classList.add('show');
+        });
+        installBtn.addEventListener('click', function () {
+          if (!deferredPrompt) return;
+          deferredPrompt.prompt();
+          deferredPrompt.userChoice.finally(function () {
+            deferredPrompt = null;
+            esconder();
+          });
+        });
+      }
+    })();
+  </script>
+
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
