@@ -5,9 +5,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../models/user_model.dart';
 import '../../../models/subscription_model.dart';
+import '../../../models/referral_commission_model.dart';
 import '../../../services/firestore_service.dart';
 import '../../../services/subscription_service.dart';
 import '../../../services/payment_service.dart';
+import '../../../services/referral_service.dart';
 import '../../../widgets/shared_widgets.dart';
 
 class AdminUsersTab extends StatefulWidget {
@@ -171,6 +173,15 @@ class _UserRow extends StatelessWidget {
                       )
                     else
                       StatusBadge(label: usuario.role.label, color: AppColors.porRole(usuario.role)),
+                    if (usuario.role == UserRole.instrutor)
+                      StreamBuilder<List<UserModel>>(
+                        stream: fsService.streamIndicadosPeloInstrutor(usuario.id),
+                        builder: (context, snap) {
+                          final n = snap.data?.length ?? 0;
+                          return Text('$n indicado${n == 1 ? '' : 's'}',
+                              style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground));
+                        },
+                      ),
                     Text(usuario.email, style: const TextStyle(fontSize: 10, color: AppColors.mutedForeground)),
                   ],
                 ),
@@ -308,6 +319,45 @@ class _UserDetailSheetState extends State<_UserDetailSheet> {
                 ],
               ),
             ),
+
+            if (_role == UserRole.instrutor) ...[
+              const SizedBox(height: 20),
+              const Text('INDICAÇÕES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1, color: AppColors.mutedForeground)),
+              const SizedBox(height: 10),
+              StreamBuilder<List<UserModel>>(
+                stream: widget.fsService.streamIndicadosPeloInstrutor(widget.usuario.id),
+                builder: (context, indicadosSnap) {
+                  if (indicadosSnap.hasError) return StreamErrorMessage(erro: indicadosSnap.error);
+                  final indicados = indicadosSnap.data ?? [];
+
+                  return StreamBuilder<List<ReferralCommissionModel>>(
+                    stream: ReferralService().streamComissoes(widget.usuario.id),
+                    builder: (context, comSnap) {
+                      if (comSnap.hasError) return StreamErrorMessage(erro: comSnap.error);
+                      final comissoes = comSnap.data ?? [];
+                      final agora = DateTime.now();
+                      final periodoAtual = '${agora.year}-${agora.month.toString().padLeft(2, '0')}';
+                      final comissaoMes = comissoes.where((c) => c.periodo == periodoAtual).fold(0.0, (s, c) => s + c.valor);
+                      final comissaoTotal = comissoes.fold(0.0, (s, c) => s + c.valor);
+
+                      return GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        mainAxisSpacing: 8,
+                        crossAxisSpacing: 8,
+                        childAspectRatio: 1.8,
+                        children: [
+                          StatCard(label: 'Indicados', value: '${indicados.length}', icon: Icons.people_outline),
+                          StatCard(label: 'Comissão este mês', value: 'R\$${comissaoMes.toStringAsFixed(2)}', icon: Icons.calendar_today_outlined),
+                          StatCard(label: 'Comissão acumulada', value: 'R\$${comissaoTotal.toStringAsFixed(2)}', icon: Icons.savings_outlined),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
+            ],
 
             if (_role == UserRole.aluno) ...[
               const SizedBox(height: 20),
